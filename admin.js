@@ -1309,7 +1309,7 @@ function renderizarTarjetaClub(clienta) {
 			? `Bono disponible: ${porcentajeTexto(porcentajeDescuento)} para usar en cada cita. Faltan ${TOTAL_SELLOS - sellos} ${TOTAL_SELLOS - sellos === 1 ? "visita" : "visitas"} para activar el 15% base.`
 			: `Faltan ${TOTAL_SELLOS - sellos} ${TOTAL_SELLOS - sellos === 1 ? "visita" : "visitas"} para activar el 15% base.`;
 
-	const urlTarjeta = new URL("https://maynails.netlify.app/fidelidad");
+	const urlTarjeta = new URL("https://m41k3l.github.io/maynails/fidelidad.html");
 	urlTarjeta.searchParams.set("tel", clienta.telefono);
 	urlTarjeta.searchParams.set("pin", clienta.pin);
 	clubQrCode.replaceChildren();
@@ -2517,7 +2517,7 @@ clubCambioPinForm.addEventListener("submit", (evento) => {
 });
 clubCopiarNfc.addEventListener("click", async () => {
 	if (!esAdministradora() || !clientaClubActual) return;
-	const urlNfc = new URL("https://maynails.netlify.app/fidelidad");
+	const urlNfc = new URL("https://m41k3l.github.io/maynails/fidelidad.html");
 	urlNfc.searchParams.set("tel", clientaClubActual.telefono);
 	urlNfc.searchParams.set("pin", clientaClubActual.pin);
 	try {
@@ -2640,3 +2640,12 @@ onAuthStateChanged(auth, (user) => {
 	logoutButton.hidden = true;
 	authStatus.textContent = "No se pudo verificar la sesión. Recarga la página e inténtalo de nuevo.";
 });
+
+if ("serviceWorker" in navigator) {
+	window.addEventListener("load", () => {
+		navigator.serviceWorker.register("./sw.js")
+			.catch((error) => {
+				console.error("No se pudo registrar el Service Worker de MayNails.", error);
+			});
+	});
+}
