@@ -26,6 +26,7 @@ const SERVICIOS_MANOS = new Set(["Manicure", "Nivelación", "Softgel", "Jelly", 
 const SERVICIOS_PIES = new Set(["Pedicure", "Quiropedia", "Láser"]);
 let duracionTotal = 0;
 let cargaDisponibilidad = 0;
+let horaSeleccionada = "";
 
 function fechaLocal() {
 	const ahora = new Date();
@@ -148,6 +149,7 @@ function hayCruce(inicio, fin, intervalos) {
 async function actualizarDisponibilidad() {
 	const solicitud = ++cargaDisponibilidad;
 	const fecha = fechaInput.value;
+	const horaPrevia = horaInput.value || horaSeleccionada;
 	horaInput.replaceChildren(new Option("Selecciona fecha y servicios", ""));
 	horaInput.disabled = true;
 	if (!fecha || !duracionTotal) {
@@ -243,7 +245,14 @@ async function actualizarDisponibilidad() {
 			return;
 		}
 		horaInput.replaceChildren(new Option("Selecciona una hora", ""));
-		for (const inicio of opciones) horaInput.add(new Option(horaTexto(inicio), horaTexto(inicio)));
+		for (const inicio of opciones) {
+			const hora = horaTexto(inicio);
+			horaInput.add(new Option(hora, hora));
+		}
+		if (opciones.some((inicio) => horaTexto(inicio) === horaPrevia)) {
+			horaInput.value = horaPrevia;
+		}
+		horaSeleccionada = horaInput.value;
 		horaInput.disabled = false;
 		mostrarMensaje(disponibilidadMensaje, `${opciones.length} horarios disponibles para ${formatoDuracion(duracionTotal)}.`);
 	} catch (error) {
@@ -253,7 +262,12 @@ async function actualizarDisponibilidad() {
 }
 
 document.getElementById("agregar-referida").addEventListener("click", agregarAcompanante);
-formulario.addEventListener("change", actualizarDuracion);
+formulario.addEventListener("change", (evento) => {
+	if (evento.target !== horaInput) actualizarDuracion();
+});
+horaInput.addEventListener("change", () => {
+	horaSeleccionada = horaInput.value;
+});
 titularNombreInput.addEventListener("input", actualizarDuracion);
 titularTelefonoInput.addEventListener("input", actualizarDuracion);
 fechaInput.min = fechaLocal();
@@ -343,6 +357,7 @@ formulario.addEventListener("submit", async (evento) => {
 		referidasLista.replaceChildren();
 		fechaInput.min = fechaLocal();
 		horaInput.replaceChildren(new Option("Selecciona primero la fecha y los servicios", ""));
+		horaSeleccionada = "";
 		horaInput.disabled = true;
 		actualizarDuracion();
 		mostrarMensaje(agendaMensaje, "¡Solicitud enviada! MayNails Studio confirmará tu cita pronto.");
