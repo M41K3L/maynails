@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="es">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Agenda tu cita | MayNails</title>
+	<link rel="stylesheet" href="styles.css">
+	<script src="tema.js" defer></script>
+	<script type="module" src="agenda.js"></script>
+</head>
+<body>
+	<header><a class="logo" href="index.html">MayNails</a>
+		<div class="header-controles">
+			<nav aria-label="Navegación principal">
+				<a href="index.html">Inicio</a><a href="servicios.html">Servicios</a><a href="agenda.html" aria-current="page">Agenda</a><a href="galeria.html">Galería</a><a href="fidelidad.html">Fidelidad</a><a href="faq.html">FAQ</a><a href="contacto.html">Contacto</a>
+			</nav>
+			<button class="tema-boton" id="tema-boton" type="button" aria-label="Cambiar tema"></button>
+		</div>
+	</header>
+	<main>
+		<section id="agenda" class="centrado">
+			<div class="pagina-titulo"><span class="tag">Reserva tu momento</span><h1>Agenda tu cita</h1><p>Elige tus servicios, consulta el tiempo reservado y selecciona un horario disponible.</p></div>
+			<form id="agenda-form" class="agenda-formulario">
+				<fieldset class="agenda-grupo">
+					<legend>Tus datos</legend>
+					<div class="agenda-campos">
+						<label>Nombre y apellido
+							<input name="nombre" type="text" maxlength="100" autocomplete="name" required>
+						</label>
+						<label>Teléfono
+							<input name="telefono" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="Ej. 584241234567" required>
+						</label>
+					</div>
+				</fieldset>
+				<fieldset class="agenda-grupo">
+					<legend>Servicios para ti</legend>
+					<p class="agenda-ayuda">Elige las técnicas que deseas realizarte. Manos o pies toman 1 h 30 min; ambos, 3 h.</p>
+					<div class="agenda-servicios">
+						<strong class="agenda-servicio-seccion">Manos</strong>
+						<label><input type="checkbox" name="serviciosTitular" value="Manicure" data-zona="manos"> Manicure</label>
+						<label><input type="checkbox" name="serviciosTitular" value="Nivelación" data-zona="manos"> Nivelación</label>
+						<label><input type="checkbox" name="serviciosTitular" value="Softgel" data-zona="manos"> Softgel</label>
+						<label><input type="checkbox" name="serviciosTitular" value="Jelly" data-zona="manos"> Jelly</label>
+						<label><input type="checkbox" name="serviciosTitular" value="Dual" data-zona="manos"> Dual</label>
+						<label><input type="checkbox" name="serviciosTitular" value="Acrílico" data-zona="manos"> Acrílico</label>
+						<strong class="agenda-servicio-seccion">Pies</strong>
+						<label><input type="checkbox" name="serviciosTitular" value="Pedicure" data-zona="pies"> Pedicure</label>
+						<label><input type="checkbox" name="serviciosTitular" value="Quiropedia" data-zona="pies"> Quiropedia</label>
+						<label><input type="checkbox" name="serviciosTitular" value="Láser" data-zona="pies"> Láser</label>
+					</div>
+					<p id="servicios-titular-resumen" class="agenda-ayuda">Servicio: pendiente de selección.</p>
+				</fieldset>
+				<section class="agenda-referidas" aria-labelledby="referidas-titulo">
+					<div class="agenda-referidas-cabecera">
+						<div><h2 id="referidas-titulo">¿Vienes acompañada?</h2><p class="agenda-ayuda">Añade una o más amigas a esta reserva.</p></div>
+						<button id="agregar-referida" class="caja-exportar" type="button">+ Viene una referida / acompañante conmigo</button>
+					</div>
+					<div id="referidas-lista"></div>
+				</section>
+				<div class="agenda-resumen" aria-live="polite">
+					<strong id="tiempo-total">Tiempo total reservado: 0 horas y 0 minutos</strong>
+				</div>
+				<fieldset class="agenda-grupo">
+					<legend>Fecha y hora</legend>
+					<div class="agenda-campos agenda-campos-horario">
+						<label>Fecha
+							<input id="fecha-cita" name="fecha" type="date" required>
+						</label>
+						<label>Hora disponible
+							<select id="hora-cita" name="hora" required disabled>
+								<option value="">Selecciona primero la fecha y los servicios</option>
+							</select>
+						</label>
+					</div>
+					<p id="agenda-disponibilidad" class="agenda-mensaje" role="status" aria-live="polite"></p>
+				</fieldset>
+				<button id="reservar-cita" class="boton agenda-submit" type="submit">Solicitar reserva</button>
+				<p id="agenda-mensaje" class="agenda-mensaje" role="status" aria-live="polite"></p>
+			</form>
+			<div class="mapa-card">
+				<span class="mapa-icono" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"></path><circle cx="12" cy="10" r="2.5"></circle></svg></span>
+				<div class="mapa-info"><h3>Visítanos</h3><p>Encuentra MayNails Studio y consulta la ruta desde Google Maps.</p></div>
+				<a class="mapa-enlace" href="https://maps.app.goo.gl/Z2ViLLoK8nWaJfop7" target="_blank" rel="noopener">Cómo llegar<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"></path></svg></a>
+			</div>
+		</section>
+	</main>
+	<footer>© 2026 MayNails · Manicura, pedicure y quiropedia</footer>
+</body>
+</html>
