@@ -409,15 +409,25 @@ function crearCelda(texto, clase) {
 	return celda;
 }
 
-function validarMovimiento(id, datos) {
-	return typeof id === "string" &&
-		(datos.tipo === "ingreso" || datos.tipo === "gasto") &&
-		typeof datos.concepto === "string" &&
-		typeof datos.categoria === "string" &&
-		(datos.categoriaGasto === undefined || CATEGORIAS_GASTO.includes(datos.categoriaGasto)) &&
-		(METODOS.includes(datos.metodo) || datos.metodo === "Efectivo Bs") &&
-		Number.isFinite(datos.montoUsd) && datos.montoUsd > 0 &&
-		typeof datos.fecha === "string";
+function normalizarFechaMovimiento(valor) {
+	if (valor && typeof valor.toDate === "function") {
+		valor = valor.toDate();
+	}
+	if (valor instanceof Date && Number.isFinite(valor.getTime())) {
+		return [
+			String(valor.getFullYear()).padStart(4, "0"),
+			String(valor.getMonth() + 1).padStart(2, "0"),
+			String(valor.getDate()).padStart(2, "0")
+		].join("-");
+	}
+	if (typeof valor !== "string") return "";
+	const fecha = valor.trim();
+	const coincidencia = fecha.match(/^(\d{4}-\d{2}-\d{2})(?:$|[T\s])/);
+	if (coincidencia) return coincidencia[1];
+	const fechaConvertida = new Date(fecha);
+	return Number.isFinite(fechaConvertida.getTime())
+		? normalizarFechaMovimiento(fechaConvertida)
+		: "";
 }
 
 function renderizarHistorial() {
@@ -425,12 +435,12 @@ function renderizarHistorial() {
 	const fechaFiltro = filtroFechaMovimiento.value;
 	const mesFiltro = filtroMesMovimiento.value;
 	const filtrados = movimientos.filter((movimiento) =>
-		(tipoFiltro === "todos" || movimiento.tipo === tipoFiltro) &&
-		(!fechaFiltro || movimiento.fecha === fechaFiltro) &&
-		(!mesFiltro || movimiento.fecha.startsWith(mesFiltro))
+		(!tipoFiltro || tipoFiltro === "todos" || movimiento.tipo === tipoFiltro) &&
+		(!fechaFiltro || normalizarFechaMovimiento(movimiento.fecha) === fechaFiltro) &&
+		(!mesFiltro || normalizarFechaMovimiento(movimiento.fecha).startsWith(mesFiltro))
 	);
 	const ordenados = [...filtrados].sort((a, b) =>
-		b.fecha.localeCompare(a.fecha) ||
+		normalizarFechaMovimiento(b.fecha).localeCompare(normalizarFechaMovimiento(a.fecha)) ||
 		(timestampMs(b.createdAt) - timestampMs(a.createdAt)) ||
 		b.id.localeCompare(a.id)
 	);
@@ -442,9 +452,16 @@ function renderizarHistorial() {
 
 	for (const movimiento of ordenados) {
 		const fila = document.createElement("tr");
+		const tipoEtiqueta = movimiento.esFiado
+			? "Fiado pendiente"
+			: movimiento.tipo === "ingreso"
+				? "Ingreso"
+				: movimiento.tipo === "gasto"
+					? "Gasto"
+					: "Movimiento";
 		fila.append(
-			crearCelda(formatearFecha(movimiento.fecha)),
-			crearCelda(movimiento.esFiado ? "Fiado pendiente" : movimiento.tipo === "ingreso" ? "Ingreso" : "Gasto", `caja-tipo caja-tipo-${movimiento.tipo}`),
+			crearCelda(formatearFecha(normalizarFechaMovimiento(movimiento.fecha)) || "—"),
+			crearCelda(tipoEtiqueta, `caja-tipo${["ingreso", "gasto"].includes(movimiento.tipo) ? ` caja-tipo-${movimiento.tipo}` : ""}`),
 			crearCelda(movimiento.concepto),
 			crearCelda(movimiento.tipo === "gasto" ? movimiento.categoriaGasto || movimiento.categoria : movimiento.categoria),
 			crearCelda(movimiento.metodo),
@@ -497,13 +514,15 @@ function formatearFecha(fecha) {
 
 function actualizarResumen() {
 	const fecha = fechaResumen.value;
-	const delDia = movimientos.filter((movimiento) => movimiento.fecha === fecha);
+	const delDia = movimientos.filter((movimiento) => normalizarFechaMovimiento(movimiento.fecha) === fecha);
 	const ingresos = delDia.filter((movimiento) =>
 		movimiento.tipo === "ingreso" && !movimiento.esFiado && movimiento.metodo !== METODO_FIADO
 	);
 	const gastos = delDia.filter((movimiento) => movimiento.tipo === "gasto");
-	const totalIngresos = ingresos.reduce((total, movimiento) => total + movimiento.montoUsd, 0);
-	const totalGastos = gastos.reduce((total, movimiento) => total + movimiento.montoUsd, 0);
+	const totalIngresos = ingresos.reduce((total, movimiento) =>
+		total + Number(movimiento.montoUsd || movimiento.equivalenteUsd || 0), 0);
+	const totalGastos = gastos.reduce((total, movimiento) =>
+		total + Number(movimiento.montoUsd || movimiento.equivalenteUsd || 0), 0);
 
 	document.getElementById("total-ingresos").textContent = formatoDinero.format(totalIngresos);
 	document.getElementById("total-gastos").textContent = formatoDinero.format(totalGastos);
@@ -519,7 +538,7 @@ function actualizarResumen() {
 		const categoria = CATEGORIAS_GASTO.includes(movimiento.categoriaGasto)
 			? movimiento.categoriaGasto
 			: "Otros gastos";
-		totales[categoria] += movimiento.montoUsd;
+		totales[categoria] += Number(movimiento.montoUsd || movimiento.equivalenteUsd || 0);
 		return totales;
 	}, Object.fromEntries(CATEGORIAS_GASTO.map((categoria) => [categoria, 0])));
 	document.getElementById("gasto-limpieza").textContent = formatoDinero.format(totalesGastos["Limpieza"]);
@@ -531,7 +550,9 @@ function actualizarResumen() {
 
 function sumarMetodo(lista, metodo) {
 	return lista.reduce((total, movimiento) =>
-		total + (movimiento.metodo === metodo ? movimiento.montoUsd : 0), 0
+		total + (movimiento.metodo === metodo
+			? Number(movimiento.montoUsd || movimiento.equivalenteUsd || 0)
+			: 0), 0
 	);
 }
 
@@ -547,10 +568,11 @@ function exportarXlsx() {
 	}
 	const XLSX = window.XLSX;
 	const movimientosOrdenados = [...movimientos].sort((a, b) =>
-		b.fecha.localeCompare(a.fecha) || timestampMs(b.createdAt) - timestampMs(a.createdAt)
+		normalizarFechaMovimiento(b.fecha).localeCompare(normalizarFechaMovimiento(a.fecha)) ||
+		timestampMs(b.createdAt) - timestampMs(a.createdAt)
 	);
 	const fecha = fechaResumen.value;
-	const delDia = movimientos.filter((movimiento) => movimiento.fecha === fecha);
+	const delDia = movimientos.filter((movimiento) => normalizarFechaMovimiento(movimiento.fecha) === fecha);
 	const gastosDelDia = delDia.filter((movimiento) => movimiento.tipo === "gasto");
 	const totalesGastos = Object.fromEntries(CATEGORIAS_GASTO.map((categoria) => [categoria, 0]));
 	for (const gasto of gastosDelDia) {
@@ -624,30 +646,38 @@ function escucharMovimientos(usuario) {
 	renderizar();
 	mostrarMensaje("Cargando movimientos…", false);
 
-	cancelarMovimientos = onSnapshot(movimientosRef, (snapshot) => {
+	cancelarMovimientos = onSnapshot(collection(db, "movimientos"), (snapshot) => {
 		if (!usuarioActual || usuarioActual.uid !== usuario.uid) return;
 		movimientos = snapshot.docs
 			.map((documento) => {
 				const datos = documento.data();
+				const montoUsd = Number(datos.montoUsd || datos.equivalenteUsd || datos.monto || 0);
 				return {
 					...datos,
 					id: documento.id,
-					montoUsd: Number(datos.montoUsd ?? datos.monto),
+					fecha: normalizarFechaMovimiento(datos.fecha),
+					tipo: typeof datos.tipo === "string" ? datos.tipo : "",
+					concepto: typeof datos.concepto === "string" ? datos.concepto : "Sin concepto",
+					categoria: typeof datos.categoria === "string" ? datos.categoria : "",
+					metodo: typeof datos.metodo === "string" ? datos.metodo : "—",
+					montoUsd: Number.isFinite(montoUsd) ? montoUsd : 0,
 					montoBs: Number.isFinite(datos.montoBs) ? datos.montoBs : null,
 					montoDivisa: Number.isFinite(datos.montoDivisa) ? datos.montoDivisa : null,
 					divisa: typeof datos.divisa === "string" ? datos.divisa : null,
 					categoriaGasto: typeof datos.categoriaGasto === "string" ? datos.categoriaGasto : "",
 					tasaUsada: Number.isFinite(datos.tasaUsada) ? datos.tasaUsada : null,
-					tipoTasa: typeof datos.tipoTasa === "string" ? datos.tipoTasa : null
+					tipoTasa: typeof datos.tipoTasa === "string" ? datos.tipoTasa : null,
+					esFiado: datos.esFiado === true
 				};
 			})
-			.filter((item) => validarMovimiento(item.id, item))
 			.sort((a, b) =>
-				b.fecha.localeCompare(a.fecha) ||
+				normalizarFechaMovimiento(b.fecha).localeCompare(normalizarFechaMovimiento(a.fecha)) ||
 				timestampMs(b.createdAt) - timestampMs(a.createdAt) ||
 				b.id.localeCompare(a.id)
 			);
-		renderizar();
+		console.log("Movimientos recibidos en UI:", movimientos.length);
+		actualizarResumen();
+		renderizarHistorial();
 		mostrarMensaje("", false);
 	}, (error) => {
 		console.error("No se pudieron cargar los movimientos de Firestore.", error);
@@ -996,6 +1026,7 @@ formularioEdicion.addEventListener("submit", async (evento) => {
 
 form.elements.fecha.value = fechaLocal();
 fechaResumen.value = fechaLocal();
+filtroTipoMovimiento.value = "";
 filtroFechaMovimiento.value = "";
 filtroMesMovimiento.value = "";
 cargarTasasGuardadas(form.elements.fecha.value);
@@ -1106,7 +1137,7 @@ for (const filtro of [filtroTipoMovimiento, filtroFechaMovimiento, filtroMesMovi
 	filtro.addEventListener("change", renderizarHistorial);
 }
 document.getElementById("limpiar-filtros-movimiento").addEventListener("click", () => {
-	filtroTipoMovimiento.value = "todos";
+	filtroTipoMovimiento.value = "";
 	filtroFechaMovimiento.value = "";
 	filtroMesMovimiento.value = "";
 	renderizarHistorial();

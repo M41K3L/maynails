@@ -1,4 +1,4 @@
-const CACHE_NAME = "maynails-admin-v6";
+const CACHE_NAME = "maynails-admin-v7";
 const CACHE_PREFIX = "maynails-";
 const PRECACHE_URLS = [
 	"./",
