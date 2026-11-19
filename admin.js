@@ -1,5 +1,5 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAnalytics, isSupported } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-analytics.js";
+import { db, firebaseApp } from "./firebase-config.js";
 import {
 	getAuth,
 	GoogleAuthProvider,
@@ -14,7 +14,6 @@ import {
 	doc,
 	getDoc,
 	getDocs,
-	getFirestore,
 	onSnapshot,
 	query,
 	runTransaction,
@@ -26,19 +25,7 @@ import {
 	where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-const firebaseConfig = {
-	apiKey: "AIzaSyAMt-pkC7Uyu766bGuRlKlA9oSHzxjdkaA",
-	authDomain: "maynails-studio.firebaseapp.com",
-	projectId: "maynails-studio",
-	storageBucket: "maynails-studio.firebasestorage.app",
-	messagingSenderId: "606992287930",
-	appId: "1:606992287930:web:7307a3f615a3b8ca895a83",
-	measurementId: "G-RCQLSRG543"
-};
-
-const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
-const db = getFirestore(firebaseApp);
 const proveedorGoogle = new GoogleAuthProvider();
 const CORREOS_ADMIN = new Set([
 	"mayracmarin25@gmail.com",
@@ -128,6 +115,7 @@ const agendaCitasVacio = document.getElementById("agenda-citas-vacio");
 const citasAdminMensaje = document.getElementById("citas-admin-mensaje");
 const agendaEstadisticasMensaje = document.getElementById("agenda-estadisticas-mensaje");
 let cancelarCitas = null;
+let cancelarConfigAgenda = null;
 let citasAgenda = [];
 const clubAdminForm = document.getElementById("club-admin-form");
 const clubAdminMensaje = document.getElementById("club-admin-mensaje");
@@ -1460,7 +1448,7 @@ function renderizarClientasDeuda() {
 	actualizarTotalCuentasPorCobrar();
 }
 
-function escucharClientas(usuario) {
+function escucharFidelidad(usuario) {
 	if (cancelarFidelidad) cancelarFidelidad();
 	clientas = [];
 	renderizarClientasDeuda();
@@ -1638,10 +1626,7 @@ function fechaLegible(fecha) {
 
 async function cargarConfiguracionAgenda() {
 	try {
-		const [horario, bloqueos] = await Promise.all([
-			getDoc(doc(db, "config_agenda", "horario")),
-			getDocs(configRef)
-		]);
+		const horario = await getDoc(doc(db, "config_agenda", "horario"));
 		if (horario.exists()) {
 			const datos = horario.data();
 			agendaConfigForm.elements.horaApertura.value = datos.horaApertura || "09:00";
@@ -1655,11 +1640,21 @@ async function cargarConfiguracionAgenda() {
 			}
 			establecerMensajeAgenda("Horario inicial sugerido: lunes a sábado, 09:00–18:00. Guarda para publicarlo en la agenda.");
 		}
-		renderizarBloqueos(bloqueos.docs);
 	} catch (error) {
 		console.error("No se pudo cargar la disponibilidad de la agenda.", error);
 		establecerMensajeAgenda("No se pudo cargar la configuración. Revisa las reglas de Firestore.", true);
 	}
+}
+
+function escucharConfigAgenda(usuario) {
+	if (cancelarConfigAgenda) cancelarConfigAgenda();
+	cancelarConfigAgenda = onSnapshot(configRef, (snapshot) => {
+		if (!usuarioActual || usuarioActual.uid !== usuario.uid) return;
+		renderizarBloqueos(snapshot.docs);
+	}, (error) => {
+		console.error("No se pudo escuchar la configuración de agenda en Firestore.", error);
+		establecerMensajeAgenda("No se pudo actualizar la lista de bloqueos. Revisa las reglas de Firestore.", true);
+	});
 }
 
 function renderizarBloqueos(documentos) {
@@ -2570,6 +2565,10 @@ onAuthStateChanged(auth, (user) => {
 		cancelarCitas();
 		cancelarCitas = null;
 	}
+	if (cancelarConfigAgenda) {
+		cancelarConfigAgenda();
+		cancelarConfigAgenda = null;
+	}
 	if (cancelarFidelidad) {
 		cancelarFidelidad();
 		cancelarFidelidad = null;
@@ -2628,8 +2627,9 @@ onAuthStateChanged(auth, (user) => {
 	void cargarTasasFirestore(user, form.elements.fecha.value);
 	escucharMovimientos(user);
 	escucharCitas(user);
-	escucharClientas(user);
+	escucharFidelidad(user);
 	cargarConfiguracionAgenda();
+	escucharConfigAgenda(user);
 }, (error) => {
 	console.error("No se pudo verificar la sesión de Firebase Authentication.", error);
 	usuarioActual = null;

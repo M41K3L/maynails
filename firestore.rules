@@ -1,0 +1,181 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function esAdmin() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in [
+          'mayracmarin25@gmail.com',
+          'riveromaikel65@gmail.com'
+        ];
+    }
+
+    function reservaPublicaValida() {
+      return request.resource.data.keys().hasOnly([
+          'fecha',
+          'hora',
+          'horaFin',
+          'duracionMin',
+          'estado',
+          'servicios',
+          'participantes',
+          'ocupacionIds',
+          'creadaEn'
+        ])
+        && request.resource.data.keys().hasAll([
+          'fecha',
+          'hora',
+          'horaFin',
+          'duracionMin',
+          'estado',
+          'servicios',
+          'participantes',
+          'ocupacionIds',
+          'creadaEn'
+        ])
+        && request.resource.data.fecha is string
+        && request.resource.data.hora is string
+        && request.resource.data.horaFin is string
+        && request.resource.data.hora < request.resource.data.horaFin
+        && request.resource.data.duracionMin is number
+        && request.resource.data.duracionMin > 0
+        && request.resource.data.duracionMin <= 1440
+        && request.resource.data.duracionMin % 30 == 0
+        && request.resource.data.estado == 'solicitada'
+        && request.resource.data.servicios is list
+        && request.resource.data.servicios.size() > 0
+        && request.resource.data.servicios.size() <= 10
+        && request.resource.data.participantes is int
+        && request.resource.data.participantes > 0
+        && request.resource.data.participantes <= 10
+        && request.resource.data.ocupacionIds is list
+        && request.resource.data.ocupacionIds.size() > 0
+        && request.resource.data.ocupacionIds.size() == request.resource.data.duracionMin / 30
+        && request.resource.data.creadaEn is timestamp;
+    }
+
+    function datosReservaPublicosValidos(citaId) {
+      return request.resource.data.keys().hasOnly([
+          'citaId',
+          'titular',
+          'referidas'
+        ])
+        && request.resource.data.keys().hasAll([
+          'citaId',
+          'titular',
+          'referidas'
+        ])
+        && request.resource.data.citaId == citaId
+        && request.resource.data.titular is map
+        && request.resource.data.titular.keys().hasOnly([
+          'nombre',
+          'telefono',
+          'servicios'
+        ])
+        && request.resource.data.titular.keys().hasAll([
+          'nombre',
+          'telefono',
+          'servicios'
+        ])
+        && request.resource.data.titular.nombre is string
+        && request.resource.data.titular.telefono is string
+        && request.resource.data.titular.servicios is list
+        && request.resource.data.referidas is list
+        && getAfter(/databases/$(database)/documents/citas/$(citaId)).data.estado == 'solicitada';
+    }
+
+    function ocupacionPublicaValida(ocupacionId) {
+      return request.resource.data.keys().hasOnly([
+          'citaId',
+          'fecha',
+          'hora',
+          'horaFin'
+        ])
+        && request.resource.data.keys().hasAll([
+          'citaId',
+          'fecha',
+          'hora',
+          'horaFin'
+        ])
+        && request.resource.data.citaId is string
+        && request.resource.data.fecha is string
+        && request.resource.data.hora is string
+        && request.resource.data.horaFin is string
+        && getAfter(/databases/$(database)/documents/citas/$(request.resource.data.citaId)).data.estado == 'solicitada'
+        && getAfter(/databases/$(database)/documents/citas/$(request.resource.data.citaId)).data.ocupacionIds is list
+        && ocupacionId in getAfter(/databases/$(database)/documents/citas/$(request.resource.data.citaId)).data.ocupacionIds
+        && request.resource.data.fecha == getAfter(/databases/$(database)/documents/citas/$(request.resource.data.citaId)).data.fecha
+        && request.resource.data.hora >= getAfter(/databases/$(database)/documents/citas/$(request.resource.data.citaId)).data.hora
+        && request.resource.data.hora < getAfter(/databases/$(database)/documents/citas/$(request.resource.data.citaId)).data.horaFin
+        && request.resource.data.hora < request.resource.data.horaFin;
+    }
+
+    match /movimientos/{movimientoId} {
+      allow read, write: if esAdmin();
+    }
+
+    match /tasas_caja/{fechaId} {
+      allow read, write: if esAdmin();
+    }
+
+    match /fidelidad/{clientaId} {
+      allow get: if esAdmin()
+        || (
+          request.auth == null
+          && clientaId.matches('^[0-9]{7,15}_[0-9]{4}$')
+          && resource.data.telefono is string
+          && resource.data.pin is string
+          && clientaId == resource.data.telefono + '_' + resource.data.pin
+        );
+      allow list, create, update, delete: if esAdmin();
+    }
+
+    match /citas/{citaId} {
+      allow get, list: if esAdmin()
+        || (
+          resource.data.keys().hasOnly([
+            'fecha',
+            'hora',
+            'horaFin',
+            'duracionMin',
+            'estado',
+            'servicios',
+            'participantes',
+            'ocupacionIds',
+            'creadaEn',
+            'atendidaEn',
+            'actualizadaEn'
+          ])
+          && resource.data.fecha is string
+        );
+      allow create: if esAdmin() || (request.auth == null && reservaPublicaValida());
+      allow update, delete: if esAdmin();
+    }
+
+    match /config_agenda/{configId} {
+      allow read: if true;
+      allow write: if esAdmin();
+    }
+
+    match /citas_datos/{citaId} {
+      allow read, update, delete: if esAdmin();
+      allow create: if esAdmin()
+        || (
+          request.auth == null
+          && datosReservaPublicosValidos(citaId)
+        );
+    }
+
+    match /agenda_ocupacion/{ocupacionId} {
+      allow get: if true;
+      allow list: if esAdmin();
+      allow create: if esAdmin()
+        || (
+          request.auth == null
+          && ocupacionPublicaValida(ocupacionId)
+        );
+      allow update, delete: if esAdmin();
+    }
+  }
+}

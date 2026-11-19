@@ -1,22 +1,8 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { db } from "./firebase-config.js";
 import {
 	doc,
-	getDoc,
-	getFirestore
+	getDoc
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-const firebaseConfig = {
-	apiKey: "AIzaSyAMt-pkC7Uyu766bGuRlKlA9oSHzxjdkaA",
-	authDomain: "maynails-studio.firebaseapp.com",
-	projectId: "maynails-studio",
-	storageBucket: "maynails-studio.firebasestorage.app",
-	messagingSenderId: "606992287930",
-	appId: "1:606992287930:web:7307a3f615a3b8ca895a83",
-	measurementId: "G-RCQLSRG543"
-};
-
-const firebaseApp = initializeApp(firebaseConfig);
-const db = getFirestore(firebaseApp);
 const WHATSAPP_NUMBER = "584242079359";
 const TOTAL_SELLOS = 4;
 const MAX_INTENTOS_PIN = 3;

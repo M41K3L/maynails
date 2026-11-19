@@ -1,10 +1,11 @@
-const CACHE_NAME = "maynails-admin-v5";
+const CACHE_NAME = "maynails-admin-v6";
 const CACHE_PREFIX = "maynails-";
 const PRECACHE_URLS = [
 	"./",
 	"./index.html",
 	"./admin.html",
 	"./admin.js",
+	"./firebase-config.js",
 	"./styles.css",
 	"./tema.js",
 	"./fidelidad.html",
