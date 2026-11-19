@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="es">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="robots" content="noindex, nofollow">
+	<title>Tarjeta de fidelidad | MayNails</title>
+	<link rel="stylesheet" href="styles.css">
+	<script src="tema.js" defer></script>
+	<script src="proteccion-media.js" defer></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+	<script type="module" src="fidelidad.js"></script>
+</head>
+<body>
+	<header>
+		<a class="logo" href="index.html">MayNails</a>
+		<div class="header-controles">
+			<a class="caja-volver" href="index.html">Volver al sitio</a>
+			<button class="tema-boton" id="tema-boton" type="button" aria-label="Cambiar tema"></button>
+		</div>
+	</header>
+	<main class="fidelidad-main">
+		<section class="fidelidad-seccion">
+			<div class="pagina-titulo fidelidad-titulo">
+				<span class="tag">Un detalle para ti</span>
+				<h1>Tarjeta de fidelidad</h1>
+				<p>Consulta tus visitas y descubre tu próximo premio.</p>
+			</div>
+
+			<section class="fidelidad-simulador" aria-labelledby="simulador-titulo">
+				<div class="fidelidad-simulador-copy">
+					<span class="tag">Un pequeño gusto para ti</span>
+					<h2 id="simulador-titulo">Calcula tu premio</h2>
+					<p>Explora el ahorro que puedes obtener en tu 5ta visita con el sistema de referidas.</p>
+					<label for="servicio-simulador">Elige un servicio de ejemplo
+						<select id="servicio-simulador">
+							<option value="13">Manicure · $13</option>
+							<option value="15">Nivelación · $15</option>
+							<option value="20">Sistema Softgel · $20</option>
+							<option value="20">Sistema Dual · $20</option>
+							<option value="23">Sistema Acrílico · $23</option>
+							<option value="15">Pedicure · $15</option>
+							<option value="20">Quiropedia · $20</option>
+							<option value="5">Láser · $5 la sesión</option>
+							<option value="5">Retiro de Sistema · $5</option>
+							<option value="3">Uña adicional · $3</option>
+						</select>
+					</label>
+					<label for="porcentaje-simulador">Simula tu nivel de descuento
+						<select id="porcentaje-simulador">
+							<option value="15" selected>15% · Premio base</option>
+							<option value="17.5">17,5% · 15% base + 1 referida</option>
+							<option value="20">20% · 15% base + 2 referidas</option>
+							<option value="0">0% · Sin descuento activo</option>
+							<option value="2.5">2,5% · 1 referida antes del premio base</option>
+							<option value="5">5% · 2 referidas antes del premio base</option>
+						</select>
+					</label>
+					<label class="fidelidad-simulador-rango" for="monto-simulador">
+						O ajusta el monto: <output id="monto-simulador-valor" for="monto-simulador">$13</output>
+						<input id="monto-simulador" type="range" min="3" max="50" step="1" value="13">
+					</label>
+					<p>Los montos mostrados son referenciales.</p>
+				</div>
+				<div class="fidelidad-simulador-resultados" aria-live="polite">
+					<div><span>Precio normal</span><strong id="precio-normal">$13.00</strong></div>
+					<div><span>Con <span id="porcentaje-premio">15%</span> de descuento</span><strong id="precio-premio">$11.05</strong></div>
+					<p>Tu ahorro <strong id="ahorro-premio">$1.95</strong></p>
+				</div>
+			</section>
+
+			<section class="fidelidad-panel" aria-labelledby="consulta-titulo">
+				<div class="fidelidad-encabezado">
+					<span class="tag">Tu tarjeta MayNails</span>
+					<h2 id="consulta-titulo">Consulta tus sellos</h2>
+					<p>Ingresa el teléfono registrado y tu PIN de acceso de cuatro dígitos.</p>
+				</div>
+				<form id="consulta-form" class="fidelidad-consulta-form">
+					<div class="fidelidad-consulta-campo">
+						<label for="telefono-consulta">Número de teléfono
+							<input id="telefono-consulta" name="telefono" type="tel" inputmode="numeric" autocomplete="tel" maxlength="20" placeholder="Ej. 584241234567" required>
+						</label>
+						<label for="pin-consulta">PIN de 4 dígitos
+							<input id="pin-consulta" name="pin" type="password" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{4}" minlength="4" maxlength="4" placeholder="••••" required>
+						</label>
+						<button class="boton fidelidad-boton" type="submit">Consultar mi tarjeta</button>
+					</div>
+				</form>
+				<p id="consulta-mensaje" class="fidelidad-mensaje" role="status" aria-live="polite"></p>
+				<article id="tarjeta-resultado" class="fidelidad-tarjeta" aria-live="polite" hidden>
+					<div class="fidelidad-tarjeta-cabecera">
+						<div><span class="tag">MayNails Studio</span><h2 id="clienta-nombre"></h2><span class="fidelidad-socia">Socia VIP MayNails</span></div>
+						<div class="fidelidad-progreso-contenedor">
+							<span id="visitas-resumen" class="fidelidad-progreso"></span>
+							<div class="fidelidad-progreso-pista" role="progressbar" aria-label="Progreso de visitas" aria-valuemin="0" aria-valuemax="4" aria-valuenow="0">
+								<span id="visitas-progreso"></span>
+							</div>
+							<small>4 visitas · premio en la 5ta</small>
+						</div>
+					</div>
+					<div class="fidelidad-referidas">
+						<p id="porcentaje-actual" class="fidelidad-referidas-premio"></p>
+						<div class="fidelidad-referidas-progreso">
+							<span id="referidas-resumen" class="fidelidad-progreso"></span>
+							<div id="referidas-pista" class="fidelidad-progreso-pista" role="progressbar" aria-label="Progreso de amigas referidas" aria-valuemin="0" aria-valuemax="2" aria-valuenow="0">
+								<span id="referidas-progreso"></span>
+							</div>
+						</div>
+					</div>
+					<div id="sellos-grid" class="fidelidad-sellos" aria-label="Progreso de la tarjeta"></div>
+					<div class="fidelidad-qr fidelidad-qr-publico">
+						<button id="ver-qr-personal" class="fidelidad-qr-toggle" type="button" aria-expanded="false" aria-controls="qr-personal-panel">Ver mi código QR personal</button>
+						<div id="qr-personal-panel" class="fidelidad-qr-panel" hidden>
+							<div id="qr-personal-imagen" class="fidelidad-qr-imagen" role="img" aria-label="Tu código QR personal"></div>
+							<p id="qr-personal-mensaje" class="fidelidad-qr-mensaje" role="status" aria-live="polite"></p>
+						</div>
+					</div>
+					<p id="premio-estado" class="fidelidad-premio-estado"></p>
+					<a id="invitar-amiga" class="boton fidelidad-boton-whatsapp" href="#" target="_blank" rel="noopener">Invitar amiga (+5% extra)</a>
+					<a id="reclamar-premio" class="boton fidelidad-boton-whatsapp" href="#" target="_blank" rel="noopener" hidden>Reclamar mi premio por WhatsApp</a>
+				</article>
+			</section>
+
+			<section class="fidelidad-niveles" aria-labelledby="niveles-titulo">
+				<div class="fidelidad-niveles-intro">
+					<span class="tag">Club MayNails</span>
+					<h2 id="niveles-titulo">Elige tu forma de disfrutar</h2>
+					<p>Tres maneras de llevar contigo tus visitas y beneficios.</p>
+				</div>
+				<div class="fidelidad-niveles-grid">
+					<article class="fidelidad-nivel">
+						<span class="fidelidad-nivel-etiqueta">Digital</span>
+						<h3>Pase Digital</h3>
+						<p class="fidelidad-nivel-precio">Gratis</p>
+						<ul>
+							<li>Consulta web con teléfono y PIN</li>
+							<li>Diseño digital único asignado</li>
+							<li>Desde 15% y hasta 20% de descuento en tu 5ta visita con referidas</li>
+						</ul>
+					</article>
+					<article class="fidelidad-nivel">
+						<span class="fidelidad-nivel-etiqueta">Para llevar</span>
+						<h3>Tarjeta Física Classic</h3>
+						<p class="fidelidad-nivel-precio">Próximamente</p>
+						<ul>
+							<li>Tarjeta laminada mate</li>
+							<li>Código QR para consulta rápida</li>
+							<li>Desde 15% y hasta 20% de descuento en tu 5ta visita con referidas</li>
+						</ul>
+					</article>
+					<article class="fidelidad-nivel fidelidad-nivel-gold">
+						<div class="fidelidad-nivel-cabecera">
+							<span class="fidelidad-nivel-etiqueta">Experiencia premium</span>
+							<span class="fidelidad-nivel-exclusiva">Exclusiva</span>
+						</div>
+						<h3>Tarjeta VIP Gold NFC</h3>
+						<p class="fidelidad-nivel-precio">Próximamente</p>
+						<ul>
+							<li>Acceso inteligente al acercar al celular, sin claves</li>
+							<li>Prioridad de agenda en temporada alta</li>
+							<li>Detalle de regalo en tu mes de cumpleaños</li>
+							<li>Desde 15% y hasta 20% de descuento en tu 5ta visita con referidas</li>
+						</ul>
+					</article>
+				</div>
+			</section>
+
+		</section>
+	</main>
+	<footer>© 2026 MayNails · Manicura, pedicure y quiropedia</footer>
+</body>
+</html>
