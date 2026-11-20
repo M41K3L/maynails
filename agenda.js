@@ -10,6 +10,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 const EMAILJS_SERVICE_ID = "YOUR_EMAILJS_SERVICE_ID";
+const EMAILJS_TEMPLATE_ID = "YOUR_EMAILJS_TEMPLATE_ID";
 const EMAILJS_TEMPLATE_ID_ADMIN = "YOUR_EMAILJS_ADMIN_TEMPLATE_ID";
 const EMAILJS_TEMPLATE_ID_CLIENTE = "YOUR_EMAILJS_CLIENT_TEMPLATE_ID";
 const EMAILJS_PUBLIC_KEY = "YOUR_EMAILJS_PUBLIC_KEY";
@@ -46,6 +47,12 @@ function emailJsConfigurado(templateId) {
 		![EMAILJS_SERVICE_ID, templateId, EMAILJS_PUBLIC_KEY]
 			.some((valor) => valor.startsWith("YOUR_"))
 	);
+}
+
+function plantillaEmail(templateIdEspecifico) {
+	return templateIdEspecifico && !templateIdEspecifico.startsWith("YOUR_")
+		? templateIdEspecifico
+		: EMAILJS_TEMPLATE_ID;
 }
 
 function cargarEmailJs() {
@@ -191,16 +198,34 @@ function formatoDuracion(minutos) {
 	return `${horas} ${horas === 1 ? "hora" : "horas"} y ${resto} minutos`;
 }
 
+function normalizarTelefonoVE(rawTelefono) {
+	const entrada = String(rawTelefono || "").trim();
+	if (!entrada) return "";
+	const empiezaConMas = entrada.startsWith("+");
+	let digitos = entrada.replace(/\D/g, "");
+	let normalizado = "";
+	if (empiezaConMas) {
+		if (digitos.startsWith("58") && digitos.length === 12) normalizado = `+${digitos}`;
+	} else if (digitos.startsWith("58") && digitos.length === 12) {
+		normalizado = `+${digitos}`;
+	} else if (digitos.startsWith("0") && digitos.length === 11) {
+		normalizado = `+58${digitos.slice(1)}`;
+	} else if (digitos.length === 10) {
+		normalizado = `+58${digitos}`;
+	}
+	return /^\+58\d{10}$/.test(normalizado) ? normalizado : "";
+}
+
 function personasDeReserva() {
 	const personas = [{
 		nombre: titularNombreInput.value.trim(),
-		telefono: titularTelefonoInput.value.replace(/\D/g, ""),
+		telefono: normalizarTelefonoVE(titularTelefonoInput.value),
 		servicios: leerServicios(formulario)
 	}];
 	for (const elemento of referidasLista.querySelectorAll(".agenda-acompanante")) {
 		personas.push({
 			nombre: elemento.querySelector("[name='nombre']").value.trim(),
-			telefono: elemento.querySelector("[name='telefono']").value.replace(/\D/g, ""),
+			telefono: normalizarTelefonoVE(elemento.querySelector("[name='telefono']").value),
 			servicios: leerServicios(elemento)
 		});
 	}
@@ -251,6 +276,10 @@ function agregarAcompanante() {
 	tarjeta.querySelector(".agenda-quitar").addEventListener("click", () => {
 		tarjeta.remove();
 		actualizarDuracion();
+	});
+	tarjeta.querySelector("[name='telefono']").addEventListener("blur", (evento) => {
+		const telefono = normalizarTelefonoVE(evento.currentTarget.value);
+		if (telefono) evento.currentTarget.value = telefono;
 	});
 	referidasLista.append(tarjeta);
 	tarjeta.querySelector("[name='nombre']").focus();
@@ -385,6 +414,10 @@ horaInput.addEventListener("change", () => {
 });
 titularNombreInput.addEventListener("input", actualizarDuracion);
 titularTelefonoInput.addEventListener("input", actualizarDuracion);
+titularTelefonoInput.addEventListener("blur", () => {
+	const telefono = normalizarTelefonoVE(titularTelefonoInput.value);
+	if (telefono) titularTelefonoInput.value = telefono;
+});
 fechaInput.min = fechaLocal();
 fechaInput.addEventListener("change", actualizarDisponibilidad);
 
@@ -396,15 +429,20 @@ formulario.addEventListener("submit", async (evento) => {
 		mostrarMensaje(agendaMensaje, "Completa el nombre y al menos un servicio para cada persona.", true);
 		return;
 	}
-	if (!/^\d{7,15}$/.test(personas[0].telefono) ||
+	if (!personas[0].telefono ||
 		personas.some((persona, indice) => {
 			const telefonoCrudo = indice === 0
 				? titularTelefonoInput.value
 				: referidasLista.querySelectorAll(".agenda-acompanante [name='telefono']")[indice - 1].value;
-			return telefonoCrudo.trim() && !/^\d{7,15}$/.test(persona.telefono);
+			return telefonoCrudo.trim() && !persona.telefono;
 		})) {
-		mostrarMensaje(agendaMensaje, "Revisa los teléfonos: deben tener entre 7 y 15 números.", true);
+		mostrarMensaje(agendaMensaje, "Ingresa un teléfono venezolano válido: 10 dígitos, 0 + 10 dígitos o +58 + 10 dígitos.", true);
 		return;
+	}
+	titularTelefonoInput.value = personas[0].telefono;
+	for (const [indice, elemento] of [...referidasLista.querySelectorAll(".agenda-acompanante")].entries()) {
+		const telefonoInput = elemento.querySelector("[name='telefono']");
+		if (personas[indice + 1].telefono) telefonoInput.value = personas[indice + 1].telefono;
 	}
 	const telefonosAcompanantes = personas.slice(1).map((persona) => persona.telefono).filter(Boolean);
 	if (telefonosAcompanantes.includes(personas[0].telefono) ||
@@ -464,7 +502,13 @@ formulario.addEventListener("submit", async (evento) => {
 			});
 			transaccion.set(datosRef, {
 				citaId: citaRef.id,
-				titular: personas[0],
+				clienteTelefono: telefono,
+				telefonoNormalizado: telefono,
+				titular: {
+					...personas[0],
+					telefonoNormalizado: telefono,
+					...(email ? { email } : {})
+				},
 				referidas: personas.slice(1)
 			});
 			for (let indice = 0; indice < idsOcupacion.length; indice += 1) {
@@ -506,12 +550,12 @@ formulario.addEventListener("submit", async (evento) => {
 			google_calendar_url: enlaces.google_calendar_url,
 			ics_data_url: enlaces.ics_data_url
 		};
-		void enviarCorreo(EMAILJS_TEMPLATE_ID_ADMIN, {
+		void enviarCorreo(plantillaEmail(EMAILJS_TEMPLATE_ID_ADMIN), {
 			...parametrosCorreo,
 			to_email: ADMIN_EMAIL
 		}, "la administradora");
 		if (email) {
-			void enviarCorreo(EMAILJS_TEMPLATE_ID_CLIENTE, {
+			void enviarCorreo(plantillaEmail(EMAILJS_TEMPLATE_ID_CLIENTE), {
 				...parametrosCorreo,
 				to_email: email
 			}, "la clienta");

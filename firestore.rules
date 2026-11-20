@@ -11,6 +11,42 @@ service cloud.firestore {
         ];
     }
 
+    function telefonoVEValido(telefono) {
+        return telefono is string && telefono.matches('^\\+58[0-9]{10}$');
+    }
+
+    function fichaTelefonoValido(datos) {
+        return datos.telefono is string
+          && (
+            telefonoVEValido(datos.telefono)
+            || datos.telefono.matches('^[0-9]{7,15}$')
+            || (datos.telefono == '' && datos.sinTelefono == true)
+          )
+          && (
+            !datos.keys().hasAny(['telefonoNormalizado'])
+            || telefonoVEValido(datos.telefonoNormalizado)
+          );
+    }
+
+    function fichaIdValido(clientaId, datos) {
+      return (
+            datos.telefono == ''
+            && datos.sinTelefono == true
+          )
+          || (
+            telefonoVEValido(datos.telefono)
+            && datos.pin is string
+            && datos.pin.matches('^[0-9]{4}$')
+            && clientaId == datos.telefono + '_' + datos.pin
+          )
+          || (
+            datos.telefono.matches('^[0-9]{7,15}$')
+            && datos.pin is string
+            && datos.pin.matches('^[0-9]{4}$')
+            && clientaId == datos.telefono + '_' + datos.pin
+          );
+    }
+
     function reservaPublicaValida() {
       return request.resource.data.keys().hasOnly([
           'fecha',
@@ -58,28 +94,42 @@ service cloud.firestore {
     function datosReservaPublicosValidos(citaId) {
       return request.resource.data.keys().hasOnly([
           'citaId',
+          'clienteTelefono',
+          'telefonoNormalizado',
           'titular',
           'referidas'
         ])
         && request.resource.data.keys().hasAll([
           'citaId',
+          'clienteTelefono',
+          'telefonoNormalizado',
           'titular',
           'referidas'
         ])
         && request.resource.data.citaId == citaId
+        && telefonoVEValido(request.resource.data.clienteTelefono)
+        && request.resource.data.telefonoNormalizado == request.resource.data.clienteTelefono
         && request.resource.data.titular is map
         && request.resource.data.titular.keys().hasOnly([
           'nombre',
           'telefono',
+          'telefonoNormalizado',
+          'email',
           'servicios'
         ])
         && request.resource.data.titular.keys().hasAll([
           'nombre',
           'telefono',
+          'telefonoNormalizado',
           'servicios'
         ])
         && request.resource.data.titular.nombre is string
-        && request.resource.data.titular.telefono is string
+        && telefonoVEValido(request.resource.data.titular.telefono)
+        && request.resource.data.titular.telefonoNormalizado == request.resource.data.titular.telefono
+        && (
+          !request.resource.data.titular.keys().hasAny(['email'])
+          || request.resource.data.titular.email is string
+        )
         && request.resource.data.titular.servicios is list
         && request.resource.data.referidas is list
         && getAfter(/databases/$(database)/documents/citas/$(citaId)).data.estado == 'solicitada';
@@ -123,12 +173,25 @@ service cloud.firestore {
       allow get: if esAdmin()
         || (
           request.auth == null
-          && clientaId.matches('^[0-9]{7,15}_[0-9]{4}$')
+          && (
+            clientaId.matches('^[0-9]{7,15}_[0-9]{4}$')
+            || clientaId.matches('^\\+58[0-9]{10}_[0-9]{4}$')
+          )
           && resource.data.telefono is string
           && resource.data.pin is string
-          && clientaId == resource.data.telefono + '_' + resource.data.pin
+          && (
+            clientaId == resource.data.telefono + '_' + resource.data.pin
+            || (
+              resource.data.telefonoNormalizado is string
+              && clientaId == resource.data.telefonoNormalizado + '_' + resource.data.pin
+            )
+          )
         );
-      allow list, create, update, delete: if esAdmin();
+      allow list, delete: if esAdmin();
+      allow create: if esAdmin()
+        && fichaTelefonoValido(request.resource.data)
+        && fichaIdValido(clientaId, request.resource.data);
+      allow update: if esAdmin() && fichaTelefonoValido(request.resource.data);
     }
 
     match /citas/{citaId} {

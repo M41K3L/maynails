@@ -6,6 +6,13 @@
 	<meta name="robots" content="noindex, nofollow">
 	<title>Administración | MayNails</title>
 	<link rel="stylesheet" href="styles.css">
+	<style>
+		.club-sugerencias{display:grid;gap:6px;margin:-8px 0 16px}
+		.club-sugerencias[hidden]{display:none}
+		.club-sugerencia{display:grid;gap:3px;width:100%;padding:10px 12px;border:1px solid var(--borde);background:var(--fondo);color:var(--texto);text-align:left;cursor:pointer}
+		.club-sugerencia:hover,.club-sugerencia:focus-visible{border-color:#6E212A;outline:2px solid #6E212A}
+		.club-sugerencia small{color:var(--texto-suave)}
+	</style>
 	<script src="tema.js" defer></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 	<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
@@ -293,8 +300,8 @@
 				</div>
 				<p id="club-admin-mensaje" class="fidelidad-mensaje" role="status" aria-live="polite"></p>
 				<form id="club-admin-form" class="fidelidad-admin-form">
-					<label for="club-telefono-admin">Teléfono (solo números)
-						<input id="club-telefono-admin" name="telefono" type="tel" inputmode="numeric" autocomplete="tel" maxlength="20" placeholder="Ej. 584241234567" required>
+					<label for="club-telefono-admin">Teléfono
+						<input id="club-telefono-admin" name="telefono" type="tel" inputmode="tel" autocomplete="tel" maxlength="24" placeholder="Ej. +58 412 123 4567" required>
 					</label>
 					<label for="club-nombre-admin">Nombre de la clienta
 						<input id="club-nombre-admin" name="nombre" type="text" maxlength="100" placeholder="Solo si es una clienta nueva">
@@ -310,11 +317,12 @@
 						<input id="club-nota-admin" name="notaTarifa" type="text" maxlength="160" placeholder="Ej. Mantenimiento $15 - tonos nude">
 					</label>
 					<label for="club-referida-por-admin">Referida por (teléfono de quien invita, opcional)
-						<input id="club-referida-por-admin" name="referidaPor" type="tel" inputmode="numeric" autocomplete="tel" maxlength="20" placeholder="Ej. 584241234567">
+						<input id="club-referida-por-admin" name="referidaPor" type="tel" inputmode="tel" autocomplete="tel" maxlength="24" placeholder="Ej. +58 412 123 4567">
 					</label>
 					<button class="caja-exportar" type="submit">Buscar / registrar</button>
 					<button id="club-guardar-perfil" class="caja-exportar" type="button" hidden>Guardar cambios de perfil</button>
 				</form>
+				<div id="club-sugerencias" class="club-sugerencias" role="listbox" aria-label="Sugerencias de clientas" hidden></div>
 				<article id="club-tarjeta-resultado" class="fidelidad-tarjeta admin-club-tarjeta" hidden>
 					<div class="fidelidad-tarjeta-cabecera">
 						<div><span class="tag">MayNails Studio</span><h3 id="club-clienta-nombre"></h3><span class="fidelidad-socia">Socia VIP MayNails</span></div>

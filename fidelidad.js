@@ -43,8 +43,22 @@ const referidasPista = document.getElementById("referidas-pista");
 let consultaEnCurso = false;
 let bloqueoTimer = null;
 
-function normalizarTelefono(telefono) {
-	return telefono.replace(/\D/g, "");
+function normalizarTelefonoVE(rawTelefono) {
+	const entrada = String(rawTelefono || "").trim();
+	if (!entrada) return "";
+	const empiezaConMas = entrada.startsWith("+");
+	const digitos = entrada.replace(/\D/g, "");
+	let normalizado = "";
+	if (empiezaConMas) {
+		if (digitos.startsWith("58") && digitos.length === 12) normalizado = `+${digitos}`;
+	} else if (digitos.startsWith("58") && digitos.length === 12) {
+		normalizado = `+${digitos}`;
+	} else if (digitos.startsWith("0") && digitos.length === 11) {
+		normalizado = `+58${digitos.slice(1)}`;
+	} else if (digitos.length === 10) {
+		normalizado = `+58${digitos}`;
+	}
+	return /^\+58\d{10}$/.test(normalizado) ? normalizado : "";
 }
 
 function establecerMensaje(elemento, texto, esError = false) {
@@ -53,7 +67,7 @@ function establecerMensaje(elemento, texto, esError = false) {
 }
 
 function telefonoValido(telefono) {
-	return /^\d{7,15}$/.test(telefono);
+	return /^\+58\d{10}$/.test(telefono);
 }
 
 function obtenerDescuentoActual(referidosCiclo, sellos) {
@@ -91,7 +105,7 @@ function actualizarBloqueoConsulta() {
 		window.clearInterval(bloqueoTimer);
 		bloqueoTimer = null;
 	}
-	const telefono = normalizarTelefono(telefonoConsulta.value);
+	const telefono = normalizarTelefonoVE(telefonoConsulta.value);
 	if (!telefonoValido(telefono)) {
 		consultaBoton.disabled = consultaEnCurso;
 		return;
@@ -177,7 +191,7 @@ function datosDeTarjeta(documento) {
 	const sellos = Number(datos.sellos ?? datos.visitas ?? 0);
 	return {
 		docId: documento.id,
-		telefono: typeof datos.telefono === "string" ? datos.telefono : "",
+		telefono: normalizarTelefonoVE(datos.telefonoNormalizado || datos.telefono),
 		pin: typeof datos.pin === "string" ? datos.pin : "",
 		nombre: typeof datos.nombre === "string" && datos.nombre.trim() ? datos.nombre.trim() : "Clienta MayNails",
 		referidosCiclo: Number.isFinite(Number(datos.referidosCiclo ?? datos.referidosConfirmados))
@@ -259,7 +273,7 @@ function renderizarTarjeta(clienta) {
 		: referidosCiclo
 			? `Puedes usar tu bono de ${porcentajeTexto(porcentajeDescuento)} en cada cita mientras siga disponible. Te faltan ${TOTAL_SELLOS - sellosCompletados} ${TOTAL_SELLOS - sellosCompletados === 1 ? "visita" : "visitas"} para desbloquear el 15% base.`
 			: `Te faltan ${TOTAL_SELLOS - sellosCompletados} ${TOTAL_SELLOS - sellosCompletados === 1 ? "visita" : "visitas"} para desbloquear el 15% base.`;
-	const textoInvitacion = `Hola amiga, te invito a agendar tu servicio en MayNails Studio: https://maynails.netlify.app/agenda\n\nIndica que vas de parte de ${clienta.nombre} (teléfono de referencia: ${clienta.telefono}). Cada amiga nueva atendida te da 2,5% de descuento y con 2 amigas acumulas 5% adicional (20% total al tener también el premio base). El bono se puede usar en tus citas aunque aún no completes las 4 visitas del premio base.`;
+	const textoInvitacion = `Hola amiga, te invito a agendar tu servicio en MayNails Studio: https://m41k3l.github.io/maynails/agenda.html\n\nIndica que vas de parte de ${clienta.nombre} (teléfono de referencia: ${clienta.telefono}). Cada amiga nueva atendida te da 2,5% de descuento y con 2 amigas acumulas 5% adicional (20% total al tener también el premio base). El bono se puede usar en tus citas aunque aún no completes las 4 visitas del premio base.`;
 	invitarAmiga.href = `https://wa.me/?text=${encodeURIComponent(textoInvitacion)}`;
 
 	if (porcentajeDescuento > 0) {
@@ -303,9 +317,9 @@ qrPersonalToggle.addEventListener("click", () => {
 
 	try {
 		if (!window.QRCode) throw new Error("No se pudo cargar la librería de códigos QR.");
-		const telefono = normalizarTelefono(telefonoConsulta.value);
+		const telefono = normalizarTelefonoVE(telefonoConsulta.value);
 		const pin = pinConsulta.value.trim();
-		const urlTarjeta = new URL("https://maynails.netlify.app/fidelidad");
+		const urlTarjeta = new URL("https://m41k3l.github.io/maynails/fidelidad.html");
 		urlTarjeta.searchParams.set("tel", telefono);
 		urlTarjeta.searchParams.set("pin", pin);
 		new window.QRCode(qrPersonalImagen, {
@@ -326,24 +340,35 @@ qrPersonalToggle.addEventListener("click", () => {
 });
 
 async function consultarClienta(telefono, pin) {
-	const ref = doc(db, "fidelidad", `${telefono}_${pin}`);
-	const resultado = await getDoc(ref);
-	if (!resultado.exists() || resultado.data().telefono !== telefono || resultado.data().pin !== pin) {
-		return null;
+	const digitosTelefono = telefono.slice(1);
+	let errorPermiso = null;
+	for (const id of [`${digitosTelefono}_${pin}`, `${telefono}_${pin}`]) {
+		try {
+			const resultado = await getDoc(doc(db, "fidelidad", id));
+			if (resultado.exists() &&
+				normalizarTelefonoVE(resultado.data().telefonoNormalizado || resultado.data().telefono) === telefono &&
+				resultado.data().pin === pin) {
+				const clienta = datosDeTarjeta(resultado);
+				renderizarTarjeta(clienta);
+				return clienta;
+			}
+		} catch (error) {
+			if (error.code !== "permission-denied") throw error;
+			errorPermiso = error;
+		}
 	}
-	const clienta = datosDeTarjeta(resultado);
-	renderizarTarjeta(clienta);
-	return clienta;
+	if (errorPermiso) throw errorPermiso;
+	return null;
 }
 
 consultaForm.addEventListener("submit", async (evento) => {
 	evento.preventDefault();
 	if (consultaEnCurso) return;
-	const telefono = normalizarTelefono(telefonoConsulta.value);
+	const telefono = normalizarTelefonoVE(telefonoConsulta.value);
 	const pin = pinConsulta.value.trim();
 	if (!telefonoValido(telefono) || !/^\d{4}$/.test(pin)) {
 		ocultarTarjeta();
-		establecerMensaje(consultaMensaje, "Ingresa un teléfono válido y un PIN numérico de exactamente 4 dígitos.", true);
+		establecerMensaje(consultaMensaje, "Ingresa un teléfono venezolano válido (+58 y 10 dígitos) y un PIN de exactamente 4 dígitos.", true);
 		return;
 	}
 	telefonoConsulta.value = telefono;
@@ -382,6 +407,10 @@ telefonoConsulta.addEventListener("input", () => {
 	ocultarTarjeta();
 	actualizarBloqueoConsulta();
 });
+telefonoConsulta.addEventListener("blur", () => {
+	const telefono = normalizarTelefonoVE(telefonoConsulta.value);
+	if (telefono) telefonoConsulta.value = telefono;
+});
 pinConsulta.addEventListener("input", ocultarTarjeta);
 
 servicioSimulador.addEventListener("change", () => {
@@ -404,7 +433,7 @@ const telefonoInicial = parametrosIniciales.get("tel");
 const pinInicial = parametrosIniciales.get("pin");
 const enlaceNfcValido = telefonoInicial !== null &&
 	pinInicial !== null &&
-	telefonoValido(normalizarTelefono(telefonoInicial)) &&
+	telefonoValido(normalizarTelefonoVE(telefonoInicial)) &&
 	/^\d{4}$/.test(pinInicial);
 
 if (telefonoInicial !== null || pinInicial !== null) {
@@ -419,13 +448,13 @@ if (telefonoInicial !== null || pinInicial !== null) {
 }
 
 if (enlaceNfcValido) {
-	telefonoConsulta.value = normalizarTelefono(telefonoInicial);
+	telefonoConsulta.value = normalizarTelefonoVE(telefonoInicial);
 	pinConsulta.value = pinInicial;
 	consultaForm.requestSubmit();
 } else {
 	const telefonoAnterior = parametrosIniciales.get("telefono");
 	if (telefonoAnterior) {
-		telefonoConsulta.value = normalizarTelefono(telefonoAnterior);
+		telefonoConsulta.value = normalizarTelefonoVE(telefonoAnterior);
 	}
 	actualizarBloqueoConsulta();
 }

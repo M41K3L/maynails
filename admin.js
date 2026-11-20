@@ -120,6 +120,7 @@ let cancelarCitas = null;
 let cancelarConfigAgenda = null;
 let citasAgenda = [];
 const clubAdminForm = document.getElementById("club-admin-form");
+const clubSugerencias = document.getElementById("club-sugerencias");
 const clubAdminMensaje = document.getElementById("club-admin-mensaje");
 const clubTelefonoInput = document.getElementById("club-telefono-admin");
 const clubNombreInput = document.getElementById("club-nombre-admin");
@@ -1245,12 +1246,53 @@ for (const [tab, nombre] of pestanasAdmin) {
 	});
 }
 
-function normalizarTelefono(telefono) {
-	return telefono.replace(/\D/g, "");
+function normalizarTelefonoVE(rawTelefono) {
+	const entrada = String(rawTelefono || "").trim();
+	if (!entrada) return "";
+	const empiezaConMas = entrada.startsWith("+");
+	const digitos = entrada.replace(/\D/g, "");
+	let normalizado = "";
+	if (empiezaConMas) {
+		if (digitos.startsWith("58") && digitos.length === 12) normalizado = `+${digitos}`;
+	} else if (digitos.startsWith("58") && digitos.length === 12) {
+		normalizado = `+${digitos}`;
+	} else if (digitos.startsWith("0") && digitos.length === 11) {
+		normalizado = `+58${digitos.slice(1)}`;
+	} else if (digitos.length === 10) {
+		normalizado = `+58${digitos}`;
+	}
+	return /^\+58\d{10}$/.test(normalizado) ? normalizado : "";
 }
 
 function telefonoValido(telefono) {
-	return /^\d{7,15}$/.test(telefono);
+	return /^\+58\d{10}$/.test(telefono);
+}
+
+async function buscarFichasPorTelefono(telefono, excluirDocId = "") {
+	const normalizado = normalizarTelefonoVE(telefono);
+	if (!telefonoValido(normalizado)) return [];
+	const fichas = new Map(
+		clientas
+			.filter((clienta) =>
+				clienta.docId !== excluirDocId &&
+				normalizarTelefonoVE(clienta.telefonoNormalizado || clienta.telefono) === normalizado
+			)
+			.map((clienta) => [clienta.docId, clienta])
+	);
+	for (const campo of ["telefonoNormalizado", "telefono"]) {
+		const valores = campo === "telefono"
+			? [normalizado, normalizado.slice(1), `0${normalizado.slice(3)}`]
+			: [normalizado];
+		for (const valor of valores) {
+			const encontrados = await getDocs(query(fidelidadRef, where(campo, "==", valor)));
+			for (const documento of encontrados.docs) {
+				if (documento.id === excluirDocId) continue;
+				if (normalizarTelefonoVE(documento.data().telefonoNormalizado || documento.data().telefono) !== normalizado) continue;
+				fichas.set(documento.id, datosDeTarjeta(documento));
+			}
+		}
+	}
+	return [...fichas.values()];
 }
 
 function obtenerDescuentoActual(referidosCiclo, sellos) {
@@ -1292,7 +1334,8 @@ function datosDeTarjeta(documento) {
 	const sellos = Number(datos.sellos ?? datos.visitas ?? 0);
 	return {
 		docId: documento.id,
-		telefono: typeof datos.telefono === "string" ? datos.telefono : "",
+		telefono: normalizarTelefonoVE(datos.telefonoNormalizado || datos.telefono),
+		telefonoNormalizado: normalizarTelefonoVE(datos.telefonoNormalizado || datos.telefono),
 		pin: typeof datos.pin === "string" ? datos.pin : "",
 		nombre: typeof datos.nombre === "string" && datos.nombre.trim() ? datos.nombre.trim() : "Clienta MayNails",
 		categoriaClienta: CATEGORIAS_CLIENTA.includes(datos.categoriaClienta) ? datos.categoriaClienta : "Clienta Nueva",
@@ -1300,7 +1343,7 @@ function datosDeTarjeta(documento) {
 		referidosCiclo: Number.isFinite(Number(datos.referidosCiclo ?? datos.referidosConfirmados))
 			? Math.min(2, Math.max(0, Math.floor(Number(datos.referidosCiclo ?? datos.referidosConfirmados))))
 			: 0,
-		referidaPor: typeof datos.referidaPor === "string" ? normalizarTelefono(datos.referidaPor) : "",
+		referidaPor: typeof datos.referidaPor === "string" ? normalizarTelefonoVE(datos.referidaPor) : "",
 		sellos: Number.isFinite(sellos) ? Math.min(TOTAL_SELLOS, Math.max(0, Math.floor(sellos))) : 0,
 		ultimaVisita: datos.ultimaVisita ?? null,
 		premioDisponible: datos.premioDisponible === true,
@@ -1404,7 +1447,7 @@ function renderizarTarjetaClub(clienta) {
 		clubQrMensaje.textContent = "No se pudo generar el QR. Revisa tu conexión e inténtalo de nuevo.";
 	}
 	const textoTarjeta = `Hola, ${clienta.nombre}. Aquí está tu tarjeta de fidelidad de MayNails: ${urlTarjeta.href}\n\nTeléfono: ${clienta.telefono}\nPIN de acceso: ${clienta.pin}\n\n${premioDisponible ? `¡Lista para canjear ${porcentajeTexto(porcentajeDescuento)} de descuento en su 5ta visita!` : `Al completar 4 visitas, tendrás ${porcentajeTexto(porcentajeDescuento)} de descuento en tu 5ta visita. Invita amigas para subirlo hasta 20%.`}`;
-	clubWhatsApp.href = `https://wa.me/${clienta.telefono}?text=${encodeURIComponent(textoTarjeta)}`;
+	clubWhatsApp.href = `https://wa.me/${clienta.telefono.replace(/\D/g, "")}?text=${encodeURIComponent(textoTarjeta)}`;
 	clubSumarVisita.disabled = premioDisponible || clubEnCurso;
 	clubCanjearPremio.disabled = porcentajeDescuento <= 0 || clubEnCurso;
 	clubCanjearPremio.textContent = premioBaseDisponible ? "Canjear premio (reiniciar ciclo)" : "Aplicar bono de referidas";
@@ -1513,16 +1556,8 @@ function renderizarClientasDeuda() {
 		abrirFicha.className = "caja-exportar";
 		abrirFicha.textContent = "Abrir ficha de clienta";
 		abrirFicha.addEventListener("click", () => {
-			clientaClubActual = clienta;
-			clubTelefonoInput.value = clienta.telefono;
-			clubNombreInput.value = clienta.nombre;
-			clubCategoriaInput.value = clienta.categoriaClienta;
-			clubNotaInput.value = clienta.notaTarifa;
-			clubReferidaPorInput.value = "";
-			clubGuardarPerfil.hidden = false;
-			renderizarTarjetaClub(clienta);
 			seleccionarPestana("club");
-			clubTarjeta.scrollIntoView({ behavior: "smooth", block: "start" });
+			abrirFichaClienta(clienta);
 		});
 		tarjeta.append(abrirFicha);
 		clientasDeudaLista.append(tarjeta);
@@ -1848,6 +1883,35 @@ function celdaTabla(texto) {
 	return celda;
 }
 
+function googleCalendarUrlCita(cita, titular) {
+	const duracion = Number(cita.duracionMin);
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(cita.fecha) ||
+		typeof cita.hora !== "string" ||
+		!Number.isFinite(duracion) || duracion <= 0) return "";
+	const [hora, minuto] = cita.hora.split(":").map(Number);
+	if (!Number.isInteger(hora) || !Number.isInteger(minuto)) return "";
+	const inicio = new Date(`${cita.fecha}T00:00:00`);
+	inicio.setHours(hora, minuto, 0, 0);
+	const fin = new Date(inicio.getTime() + duracion * 60000);
+	const formatoGoogle = (fecha) =>
+		`${fecha.getFullYear()}${String(fecha.getMonth() + 1).padStart(2, "0")}${String(fecha.getDate()).padStart(2, "0")}T${String(fecha.getHours()).padStart(2, "0")}${String(fecha.getMinutes()).padStart(2, "0")}00`;
+	const detalles = [
+		`Clienta: ${titular.nombre || "Clienta"}`,
+		`Teléfono: ${normalizarTelefonoVE(titular.telefonoNormalizado || titular.telefono)}`,
+		`Servicios: ${Array.isArray(cita.servicios) ? cita.servicios.join(", ") : ""}`,
+		`Duración: ${duracion} minutos`
+	].join("\n");
+	const url = new URL("https://calendar.google.com/calendar/render");
+	url.search = new URLSearchParams({
+		action: "TEMPLATE",
+		text: "Cita en MayNails Studio",
+		dates: `${formatoGoogle(inicio)}/${formatoGoogle(fin)}`,
+		ctz: "America/Caracas",
+		details: detalles
+	}).toString();
+	return url.href;
+}
+
 function renderizarCitas() {
 	const ordenadas = [...citasAgenda].sort((a, b) =>
 		a.fecha.localeCompare(b.fecha) || a.hora.localeCompare(b.hora)
@@ -1876,6 +1940,42 @@ function renderizarCitas() {
 		estado.value = cita.estado;
 		estadoCelda.append(estado);
 		const accionCelda = document.createElement("td");
+		const urlGoogleCalendar = googleCalendarUrlCita(cita, titular);
+		if (urlGoogleCalendar) {
+			const googleCalendar = document.createElement("a");
+			googleCalendar.className = "caja-exportar";
+			googleCalendar.href = urlGoogleCalendar;
+			googleCalendar.target = "_blank";
+			googleCalendar.rel = "noopener";
+			googleCalendar.textContent = "Google Calendar";
+			accionCelda.append(googleCalendar);
+		}
+		const telefonoClienta = normalizarTelefonoVE(titular.telefonoNormalizado || titular.telefono);
+		if (telefonoClienta) {
+			const resumenWhatsApp = `Hola ${titular.nombre || ""}, te escribimos de MayNails Studio por tu cita del ${fechaLegible(cita.fecha)} a las ${cita.hora}. Servicios: ${Array.isArray(cita.servicios) ? cita.servicios.join(", ") : "por confirmar"}. Duración: ${cita.duracionMin || 0} minutos.`;
+			const whatsapp = document.createElement("a");
+			whatsapp.className = "caja-exportar";
+			whatsapp.href = `https://wa.me/${telefonoClienta.replace(/\D/g, "")}?text=${encodeURIComponent(resumenWhatsApp)}`;
+			whatsapp.target = "_blank";
+			whatsapp.rel = "noopener";
+			whatsapp.textContent = "WhatsApp";
+			accionCelda.append(whatsapp);
+		}
+		const clientaExistente = clientas.find((clienta) =>
+			telefonoClienta &&
+			normalizarTelefonoVE(clienta.telefonoNormalizado || clienta.telefono) === telefonoClienta
+		);
+		if (clientaExistente) {
+			const abrirFicha = document.createElement("button");
+			abrirFicha.type = "button";
+			abrirFicha.className = "caja-exportar";
+			abrirFicha.textContent = "Abrir ficha";
+			abrirFicha.addEventListener("click", () => {
+				seleccionarPestana("club");
+				abrirFichaClienta(clientaExistente);
+			});
+			accionCelda.append(abrirFicha);
+		}
 		const guardar = document.createElement("button");
 		guardar.type = "button";
 		guardar.className = "caja-exportar";
@@ -1911,7 +2011,8 @@ function incrementarHistorial(datos, titular, referidaPor = "") {
 		: Number(datos.visitas ?? datos.sellos ?? 0);
 	return {
 		nombre: titular.nombre,
-		telefono: titular.telefono,
+		telefono: normalizarTelefonoVE(titular.telefono),
+		telefonoNormalizado: normalizarTelefonoVE(titular.telefono),
 		...(datos.pin || titular.pin ? { pin: datos.pin || titular.pin } : {}),
 		sellos: nuevoSello,
 		visitas: nuevoSello,
@@ -1933,21 +2034,25 @@ async function cambiarEstadoCita(cita, nuevoEstado) {
 	const titular = datosReserva.titular;
 	const referidas = Array.isArray(datosReserva.referidas) ? datosReserva.referidas : [];
 	const phones = [...new Set([titular, ...referidas]
-		.map((persona) => (persona.telefono || "").replace(/\D/g, ""))
+		.map((persona) => normalizarTelefonoVE(persona.telefonoNormalizado || persona.telefono))
 		.filter(Boolean))];
-	if (phones.some((telefono) => !/^\d{7,15}$/.test(telefono))) {
-		throw new Error("La cita contiene un teléfono inválido; corrige sus datos antes de cambiar el estado.");
+	if (!normalizarTelefonoVE(titular.telefonoNormalizado || titular.telefono) ||
+		referidas.some((persona) => persona.telefono && !normalizarTelefonoVE(persona.telefonoNormalizado || persona.telefono))) {
+		throw new Error("La cita contiene un teléfono venezolano incompleto o inválido; corrige sus datos antes de cambiar el estado.");
 	}
-	if (referidas.some((persona) => persona.telefono && persona.telefono.replace(/\D/g, "") === titular.telefono.replace(/\D/g, ""))) {
+	if (referidas.some((persona) =>
+		persona.telefono &&
+		normalizarTelefonoVE(persona.telefonoNormalizado || persona.telefono) ===
+			normalizarTelefonoVE(titular.telefonoNormalizado || titular.telefono))) {
 		throw new Error("La clienta titular no puede figurar también como su propia referida.");
 	}
 
 	const perfiles = new Map();
 	await Promise.all(phones.map(async (telefono) => {
-		const encontrados = await getDocs(query(fidelidadRef, where("telefono", "==", telefono)));
-		if (encontrados.size > 1) throw new Error(`Hay varias fichas de fidelidad para el teléfono ${telefono}. Corrige el duplicado.`);
-		if (encontrados.size === 1) {
-			perfiles.set(telefono, { ref: encontrados.docs[0].ref });
+		const encontrados = await buscarFichasPorTelefono(telefono);
+		if (encontrados.length > 1) throw new Error(`Hay varias fichas de fidelidad para el teléfono ${telefono}. Corrige el duplicado.`);
+		if (encontrados.length === 1) {
+			perfiles.set(telefono, { ref: doc(db, "fidelidad", encontrados[0].docId) });
 		} else {
 			const pin = generarPin();
 			perfiles.set(telefono, { ref: doc(db, "fidelidad", `${telefono}_${pin}`), pin });
@@ -1985,14 +2090,14 @@ async function cambiarEstadoCita(cita, nuevoEstado) {
 
 		if (nuevoEstado === "atendida") {
 			if (estadoAnterior === "cancelada") throw new Error("Una cita cancelada debe reactivarse antes de marcarse como atendida.");
-			const titularTelefono = titular.telefono.replace(/\D/g, "");
+			const titularTelefono = normalizarTelefonoVE(titular.telefonoNormalizado || titular.telefono);
 			const perfilTitular = perfiles.get(titularTelefono);
 			const snapshotTitular = perfilSnapshots.get(titularTelefono);
 			const datosTitular = snapshotTitular.exists() ? snapshotTitular.data() : {};
 
 			let referidasNuevas = 0;
 			for (const referida of referidas) {
-				const telefono = (referida.telefono || "").replace(/\D/g, "");
+				const telefono = normalizarTelefonoVE(referida.telefonoNormalizado || referida.telefono);
 				if (telefono) {
 					if (telefono === titularTelefono) continue;
 					const perfil = perfiles.get(telefono);
@@ -2007,7 +2112,10 @@ async function cambiarEstadoCita(cita, nuevoEstado) {
 							referidosCiclo: 0,
 							creadoEn: serverTimestamp()
 						}),
-						...incrementarHistorial({ ...datos, pin: datos.pin || perfil.pin }, referida, titularTelefono)
+						...incrementarHistorial({ ...datos, pin: datos.pin || perfil.pin }, referida, titularTelefono),
+						...(snapshot.exists() && !perfil.ref.id.startsWith("+58")
+							? { telefono: perfil.ref.id.split("_")[0], telefonoNormalizado: telefono }
+							: {})
 					}, { merge: true });
 				}
 			}
@@ -2037,6 +2145,9 @@ async function cambiarEstadoCita(cita, nuevoEstado) {
 					creadoEn: serverTimestamp()
 				}),
 				...incrementarHistorial({ ...datosTitular, pin: datosTitular.pin || perfilTitular.pin }, titular),
+				...(snapshotTitular.exists() && !perfilTitular.ref.id.startsWith("+58")
+					? { telefono: perfilTitular.ref.id.split("_")[0], telefonoNormalizado: titularTelefono }
+					: {}),
 				referidosCiclo: Math.min(2, referidosCiclo + referidasNuevas)
 			}, { merge: true });
 			transaccion.update(citaRef, { estado: nuevoEstado, atendidaEn: serverTimestamp(), actualizadaEn: serverTimestamp() });
@@ -2170,18 +2281,80 @@ async function cargarEstadisticasAgenda(citas = citasAgenda) {
 	}
 }
 
+function abrirFichaClienta(clienta) {
+	clientaClubActual = clienta;
+	clubTelefonoInput.value = clienta.telefono;
+	clubNombreInput.value = clienta.nombre;
+	clubCategoriaInput.value = clienta.categoriaClienta;
+	clubNotaInput.value = clienta.notaTarifa;
+	clubReferidaPorInput.value = "";
+	clubGuardarPerfil.hidden = false;
+	clubSugerencias.hidden = true;
+	renderizarTarjetaClub(clienta);
+	clubTarjeta.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function actualizarSugerenciasClientas(campo) {
+	const texto = campo.value.trim();
+	const digitos = texto.replace(/\D/g, "");
+	const termino = texto.toLocaleLowerCase("es");
+	if (texto.length < 2) {
+		clubSugerencias.replaceChildren();
+		clubSugerencias.hidden = true;
+		return;
+	}
+	const coincidencias = clientas.filter((clienta) => {
+		const telefono = normalizarTelefonoVE(clienta.telefonoNormalizado || clienta.telefono);
+		const digitosTelefono = telefono.replace(/\D/g, "");
+		return clienta.nombre.toLocaleLowerCase("es").includes(termino) ||
+			(digitos.length >= 2 && digitosTelefono.includes(digitos));
+	}).slice(0, 8);
+	clubSugerencias.replaceChildren();
+	for (const clienta of coincidencias) {
+		const boton = document.createElement("button");
+		boton.type = "button";
+		boton.className = "club-sugerencia";
+		boton.setAttribute("role", "option");
+		const nombre = document.createElement("strong");
+		nombre.textContent = clienta.nombre;
+		const detalle = document.createElement("small");
+		detalle.textContent = `${clienta.telefono || "Sin teléfono"} · ${clienta.categoriaClienta}${clienta.saldoPendienteUsd > 0 ? ` · Debe ${formatoDinero.format(clienta.saldoPendienteUsd)}` : " · Al día"}`;
+		boton.append(nombre, detalle);
+		boton.addEventListener("mousedown", (evento) => evento.preventDefault());
+		boton.addEventListener("click", () => abrirFichaClienta(clienta));
+		clubSugerencias.append(boton);
+	}
+	clubSugerencias.hidden = coincidencias.length === 0;
+}
+
+for (const campo of [clubTelefonoInput, clubNombreInput]) {
+	campo.addEventListener("input", () => actualizarSugerenciasClientas(campo));
+	campo.addEventListener("focus", () => actualizarSugerenciasClientas(campo));
+	campo.addEventListener("blur", () => {
+		window.setTimeout(() => {
+			if (!clubSugerencias.matches(":hover")) clubSugerencias.hidden = true;
+		}, 150);
+	});
+}
+for (const campo of [clubTelefonoInput, clubReferidaPorInput]) {
+	campo.addEventListener("blur", () => {
+		const telefono = normalizarTelefonoVE(campo.value);
+		if (telefono) campo.value = telefono;
+	});
+}
+
 clubAdminForm.addEventListener("submit", async (evento) => {
 	evento.preventDefault();
 	if (!esAdministradora() || clubEnCurso) return;
-	const telefono = normalizarTelefono(clubTelefonoInput.value);
+	const telefono = normalizarTelefonoVE(clubTelefonoInput.value);
 	const nombre = clubNombreInput.value.trim();
-	const telefonoReferidora = normalizarTelefono(clubReferidaPorInput.value);
+	const telefonoReferidora = normalizarTelefonoVE(clubReferidaPorInput.value);
 	if (!telefonoValido(telefono)) {
-		establecerMensajeClub("Ingresa un teléfono válido con código de país, usando entre 7 y 15 números.", true);
+		establecerMensajeClub("Ingresa un teléfono venezolano válido: 10 dígitos, 0 + 10 dígitos o +58 + 10 dígitos.", true);
 		return;
 	}
 	if (clubReferidaPorInput.value.trim() && !telefonoValido(telefonoReferidora)) {
-		establecerMensajeClub("El teléfono de quien invita debe tener entre 7 y 15 números.", true);
+		establecerMensajeClub("El teléfono de quien invita no es válido. Usa 10 dígitos locales o el formato +58.", true);
 		return;
 	}
 	if (telefonoReferidora && telefonoReferidora === telefono) {
@@ -2197,19 +2370,16 @@ clubAdminForm.addEventListener("submit", async (evento) => {
 	deshabilitarControlesClub(true);
 	establecerMensajeClub("Buscando clienta…");
 	try {
-		const resultados = await getDocs(query(fidelidadRef, where("telefono", "==", telefono)));
-		if (resultados.size > 1) {
-			throw new Error("Hay más de una tarjeta registrada con ese teléfono. Corrige el duplicado en Firestore.");
+		const fichasExistentes = await buscarFichasPorTelefono(telefono);
+		if (fichasExistentes.length > 1) {
+			establecerMensajeClub("Ya existen varias fichas para ese teléfono. Elige la ficha correcta en las sugerencias y corrige los duplicados.", true);
+			clubSugerencias.hidden = false;
+			return;
 		}
-		if (resultados.size === 1) {
-			const clienta = datosDeTarjeta(resultados.docs[0]);
-			clubNombreInput.value = clienta.nombre;
-			clubCategoriaInput.value = clienta.categoriaClienta;
-			clubNotaInput.value = clienta.notaTarifa;
-			clubReferidaPorInput.value = "";
-			clubGuardarPerfil.hidden = false;
+		if (fichasExistentes.length === 1) {
+			const clienta = fichasExistentes[0];
+			abrirFichaClienta(clienta);
 			establecerMensajeClub("Tarjeta encontrada.");
-			renderizarTarjetaClub(clienta);
 			return;
 		}
 		if (!nombre) {
@@ -2219,14 +2389,14 @@ clubAdminForm.addEventListener("submit", async (evento) => {
 
 		let referidora = null;
 		if (telefonoReferidora) {
-			const resultadosReferidora = await getDocs(query(fidelidadRef, where("telefono", "==", telefonoReferidora)));
-			if (resultadosReferidora.size === 0) {
+			const fichasReferidora = await buscarFichasPorTelefono(telefonoReferidora);
+			if (fichasReferidora.length === 0) {
 				throw new Error("No se encontró una tarjeta registrada con el teléfono de quien invita.");
 			}
-			if (resultadosReferidora.size > 1) {
+			if (fichasReferidora.length > 1) {
 				throw new Error("Hay más de una tarjeta con el teléfono de quien invita. Corrige el duplicado en Firestore.");
 			}
-			referidora = resultadosReferidora.docs[0];
+			referidora = doc(db, "fidelidad", fichasReferidora[0].docId);
 		}
 
 		let clientaNueva = null;
@@ -2236,6 +2406,7 @@ clubAdminForm.addEventListener("submit", async (evento) => {
 			try {
 				const datosClientaNueva = {
 					telefono,
+					telefonoNormalizado: telefono,
 					pin,
 					nombre,
 					categoriaClienta: CATEGORIAS_CLIENTA.includes(clubCategoriaInput.value) ? clubCategoriaInput.value : "Clienta Nueva",
@@ -2258,7 +2429,8 @@ clubAdminForm.addEventListener("submit", async (evento) => {
 					let invitadora = { nombre: "", bonoActivo: false, referidosCiclo: 0 };
 					if (referidora) {
 						const actualReferidora = await transaccion.get(referidora.ref);
-						if (!actualReferidora.exists() || actualReferidora.data().telefono !== telefonoReferidora) {
+						if (!actualReferidora.exists() ||
+							normalizarTelefonoVE(actualReferidora.data().telefonoNormalizado || actualReferidora.data().telefono) !== telefonoReferidora) {
 							throw new Error("La tarjeta de quien invita ya no está disponible.");
 						}
 						const datosReferidora = actualReferidora.data();
@@ -2314,23 +2486,45 @@ clubAdminForm.addEventListener("submit", async (evento) => {
 
 clubGuardarPerfil.addEventListener("click", async () => {
 	if (!esAdministradora() || !clientaClubActual || clubEnCurso) return;
+	const telefono = normalizarTelefonoVE(clubTelefonoInput.value);
 	const nombre = clubNombreInput.value.trim();
 	const categoriaClienta = clubCategoriaInput.value;
 	const notaTarifa = clubNotaInput.value.trim();
 	const saldoPendienteUsd = normalizarDecimal(clubSaldoPendienteInput.value);
 	const detalleDeuda = clubDetalleDeudaInput.value.trim().slice(0, 500);
 	const fechaDeuda = clubFechaDeudaInput.value;
+	if (!telefonoValido(telefono)) {
+		establecerMensajeClub("Ingresa un teléfono venezolano válido antes de guardar el perfil.", true);
+		return;
+	}
 	if (!nombre || !CATEGORIAS_CLIENTA.includes(categoriaClienta) || notaTarifa.length > 160 ||
 		!Number.isFinite(saldoPendienteUsd) || saldoPendienteUsd < 0 ||
 		(saldoPendienteUsd > 0 && !/^\d{4}-\d{2}-\d{2}$/.test(fechaDeuda))) {
 		establecerMensajeClub("Completa un nombre, una categoría válida, una nota y una fecha para cada saldo pendiente.", true);
 		return;
 	}
+	let fichasDuplicadas;
+	try {
+		fichasDuplicadas = await buscarFichasPorTelefono(telefono, clientaClubActual.docId);
+	} catch (error) {
+		console.error("No se pudo validar el teléfono de la ficha.", error);
+		establecerMensajeClub("No se pudo comprobar si ese teléfono ya está registrado. Inténtalo otra vez.", true);
+		return;
+	}
+	if (fichasDuplicadas.length) {
+		establecerMensajeClub(`Ya existe otra ficha para ${telefono}. Abre o selecciona esa ficha en las sugerencias antes de guardar.`, true);
+		clubSugerencias.hidden = false;
+		return;
+	}
+	const docIdAnterior = clientaClubActual.docId;
+	const docIdNuevo = `${telefono}_${clientaClubActual.pin}`;
 	clubEnCurso = true;
 	deshabilitarControlesClub(true);
 	clubGuardarPerfil.disabled = true;
 	try {
-		await setDoc(doc(db, "fidelidad", clientaClubActual.docId), {
+		const datosActualizados = {
+			telefono,
+			telefonoNormalizado: telefono,
 			nombre,
 			categoriaClienta,
 			notaTarifa,
@@ -2338,9 +2532,28 @@ clubGuardarPerfil.addEventListener("click", async () => {
 			detalleDeuda,
 			fechaDeuda: saldoPendienteUsd > 0 ? fechaDeuda : "",
 			actualizadoEn: serverTimestamp()
-		}, { merge: true });
+		};
+		if (docIdNuevo === docIdAnterior) {
+			await setDoc(doc(db, "fidelidad", docIdAnterior), datosActualizados, { merge: true });
+		} else {
+			const refAnterior = doc(db, "fidelidad", docIdAnterior);
+			const refNuevo = doc(db, "fidelidad", docIdNuevo);
+			await runTransaction(db, async (transaccion) => {
+				const [anterior, destino] = await Promise.all([
+					transaccion.get(refAnterior),
+					transaccion.get(refNuevo)
+				]);
+				if (!anterior.exists()) throw new Error("No se encontró la ficha actualizada.");
+				if (destino.exists()) throw new Error("El número nuevo ya tiene una ficha asociada.");
+				transaccion.set(refNuevo, { ...anterior.data(), ...datosActualizados });
+				transaccion.delete(refAnterior);
+			});
+		}
 		const clientaActualizada = {
 			...clientaClubActual,
+			docId: docIdNuevo,
+			telefono,
+			telefonoNormalizado: telefono,
 			nombre,
 			categoriaClienta,
 			notaTarifa,
@@ -2349,6 +2562,7 @@ clubGuardarPerfil.addEventListener("click", async () => {
 			fechaDeuda: saldoPendienteUsd > 0 ? fechaDeuda : ""
 		};
 		clientaClubActual = clientaActualizada;
+		clubTelefonoInput.value = telefono;
 		renderizarTarjetaClub(clientaActualizada);
 		establecerMensajeClub("Perfil y estado de cuenta guardados.");
 		renderizarClientasDeuda();
