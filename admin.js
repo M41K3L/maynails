@@ -92,9 +92,13 @@ const formularioEdicion = document.getElementById("editar-movimiento-form");
 const filtroTipoMovimiento = document.getElementById("filtro-tipo-movimiento");
 const filtroFechaMovimiento = document.getElementById("filtro-fecha-movimiento");
 const filtroMesMovimiento = document.getElementById("filtro-mes-movimiento");
+const historialContenido = document.getElementById("historial-contenido");
+const toggleHistorial = document.getElementById("toggle-historial-movimientos");
 const movimientosRef = collection(db, "movimientos");
 const TASAS_STORAGE_KEY = "maynails-tasas-caja";
 let movimientos = [];
+let historialAbierto = false;
+let ultimoCampoMontoEditado = "montoUsd";
 let usuarioActual = null;
 let cancelarMovimientos = null;
 let movimientoEditandoId = null;
@@ -119,6 +123,7 @@ const agendaEstadisticasMensaje = document.getElementById("agenda-estadisticas-m
 let cancelarCitas = null;
 let cancelarConfigAgenda = null;
 let citasAgenda = [];
+let mensajeCitaPersistente = "";
 const clubAdminForm = document.getElementById("club-admin-form");
 const clubSugerencias = document.getElementById("club-sugerencias");
 const clubAdminMensaje = document.getElementById("club-admin-mensaje");
@@ -336,8 +341,8 @@ function esMetodoEnBolivares(metodo = form.elements.metodo.value) {
 
 function actualizarCamposMoneda() {
 	const usaBolivares = esMetodoEnBolivares();
-	montoUsdCampo.hidden = usaBolivares;
-	montoUsdCampo.querySelector("input").required = !usaBolivares;
+	montoUsdCampo.hidden = false;
+	montoUsdCampo.querySelector("input").required = true;
 	montoBsCampos.hidden = !usaBolivares;
 	form.elements.montoBs.required = usaBolivares;
 	form.elements.tipoTasa.required = usaBolivares;
@@ -358,16 +363,35 @@ function actualizarTasaSegunMetodo() {
 }
 
 function actualizarEtiquetaDivisa() {
-	const tipoTasa = form.elements.tipoTasaDivisa.value;
+	const tipoTasa = esMetodoEnBolivares()
+		? form.elements.tipoTasa.value
+		: form.elements.tipoTasaDivisa.value;
 	const divisa = DIVISAS_TASA[tipoTasa] || "USD";
 	document.getElementById("monto-usd-etiqueta").textContent = `Monto en ${divisa}`;
 }
 
-function actualizarMontoConvertido() {
+function actualizarMontoConvertido(origenMonto = "") {
 	let montoBs = 0;
 	if (esMetodoEnBolivares()) {
+		const tipoTasa = form.elements.tipoTasa.value;
+		const tasaActiva = obtenerTasa(tipoTasa);
+		const origen = origenMonto || ultimoCampoMontoEditado;
 		const montoBsEntrada = normalizarDecimal(form.elements.montoBs.value);
-		montoBs = Number.isFinite(montoBsEntrada) && montoBsEntrada > 0 ? montoBsEntrada : 0;
+		const montoDivisaEntrada = normalizarDecimal(form.elements.montoUsd.value);
+		if (tasaActiva && origen === "montoUsd") {
+			montoBs = Number.isFinite(montoDivisaEntrada) && montoDivisaEntrada > 0
+				? montoDivisaEntrada * tasaActiva
+				: 0;
+			form.elements.montoBs.value = montoBs > 0 ? String(montoBs) : "";
+		} else if (tasaActiva && origen === "montoBs") {
+			montoBs = Number.isFinite(montoBsEntrada) && montoBsEntrada > 0 ? montoBsEntrada : 0;
+			form.elements.montoUsd.value = montoBs > 0 ? String(montoBs / tasaActiva) : "";
+		} else {
+			montoBs = Number.isFinite(montoBsEntrada) && montoBsEntrada > 0 ? montoBsEntrada : 0;
+			if (tasaActiva && montoBs > 0 && !Number.isFinite(montoDivisaEntrada)) {
+				form.elements.montoUsd.value = String(montoBs / tasaActiva);
+			}
+		}
 		const tasaBcv = obtenerTasa("BCV");
 		const equivalenteUsd = montoBs > 0 && tasaBcv ? montoBs / tasaBcv : 0;
 		montoUsdPreview.value = formatoDinero.format(Number.isFinite(equivalenteUsd) ? equivalenteUsd : 0);
@@ -398,6 +422,15 @@ function actualizarMontoConvertido() {
 		: "—";
 	document.getElementById("equivalente-usdt").textContent =
 		Number.isFinite(equivalenteUsdt) ? `${equivalenteUsdt.toFixed(2)} USDT` : "—";
+}
+
+function establecerHistorialAbierto(abierto) {
+	historialAbierto = Boolean(abierto);
+	historialContenido.classList.toggle("is-open", historialAbierto);
+	toggleHistorial.setAttribute("aria-expanded", String(historialAbierto));
+	toggleHistorial.textContent = historialAbierto
+		? "Ocultar historial"
+		: `Ver historial de movimientos (${movimientos.length} ${movimientos.length === 1 ? "registro" : "registros"})`;
 }
 
 function mostrarMensaje(texto, esError) {
@@ -437,6 +470,7 @@ function renderizarHistorial() {
 	const tipoFiltro = filtroTipoMovimiento.value;
 	const fechaFiltro = filtroFechaMovimiento.value;
 	const mesFiltro = filtroMesMovimiento.value;
+	if (tipoFiltro || fechaFiltro || mesFiltro) establecerHistorialAbierto(true);
 	const filtrados = movimientos.filter((movimiento) =>
 		(!tipoFiltro || tipoFiltro === "todos" || movimiento.tipo === tipoFiltro) &&
 		(!fechaFiltro || normalizarFechaMovimiento(movimiento.fecha) === fechaFiltro) &&
@@ -496,6 +530,7 @@ function renderizarHistorial() {
 		fila.append(accion);
 		tabla.append(fila);
 	}
+	establecerHistorialAbierto(historialAbierto);
 }
 
 function formatoBolivares(monto) {
@@ -771,6 +806,7 @@ function editarMovimiento(id) {
 	if (guardandoEdicionMovimiento) return;
 	const movimiento = movimientos.find((item) => item.id === id);
 	if (!movimiento) return;
+	establecerHistorialAbierto(true);
 	const tipoNormalizado = String(movimiento.tipo || "").trim().toLowerCase();
 	if (!["ingreso", "gasto"].includes(tipoNormalizado)) {
 		const texto = "No se puede editar: el tipo de movimiento guardado no es válido.";
@@ -1092,9 +1128,18 @@ form.elements.metodo.addEventListener("change", () => {
 	clientaFiadoCampo.hidden = !esFiado;
 	clientaFiadoSelect.required = esFiado;
 });
-form.elements.montoBs.addEventListener("input", actualizarMontoConvertido);
-form.elements.montoUsd.addEventListener("input", actualizarMontoConvertido);
-form.elements.tipoTasa.addEventListener("change", actualizarMontoConvertido);
+form.elements.montoUsd.addEventListener("input", () => {
+	ultimoCampoMontoEditado = "montoUsd";
+	actualizarMontoConvertido("montoUsd");
+});
+form.elements.montoBs.addEventListener("input", () => {
+	ultimoCampoMontoEditado = "montoBs";
+	actualizarMontoConvertido("montoBs");
+});
+form.elements.tipoTasa.addEventListener("change", () => {
+	actualizarEtiquetaDivisa();
+	actualizarMontoConvertido();
+});
 form.elements.tipoTasaDivisa.addEventListener("change", () => {
 	actualizarEtiquetaDivisa();
 	actualizarMontoConvertido();
@@ -1107,6 +1152,7 @@ for (const input of [tasaBcvInput, tasaEuroInput, tasaUsdtInput]) {
 }
 form.elements.fecha.addEventListener("change", () => {
 	cargarTasasGuardadas(form.elements.fecha.value);
+	if (usuarioActual) void cargarTasasFirestore(usuarioActual, form.elements.fecha.value);
 });
 tasasForm.addEventListener("submit", async (evento) => {
 	evento.preventDefault();
@@ -1185,6 +1231,7 @@ tasasForm.addEventListener("submit", async (evento) => {
 });
 fechaResumen.addEventListener("change", actualizarResumen);
 document.getElementById("exportar-xlsx").addEventListener("click", exportarXlsx);
+toggleHistorial.addEventListener("click", () => establecerHistorialAbierto(!historialAbierto));
 for (const filtro of [filtroTipoMovimiento, filtroFechaMovimiento, filtroMesMovimiento]) {
 	filtro.addEventListener("change", renderizarHistorial);
 }
@@ -1194,6 +1241,7 @@ document.getElementById("limpiar-filtros-movimiento").addEventListener("click", 
 	filtroMesMovimiento.value = "";
 	renderizarHistorial();
 });
+establecerHistorialAbierto(false);
 document.getElementById("cancelar-edicion-movimiento").addEventListener("click", cancelarEdicion);
 filtroDeudaClientas.addEventListener("change", renderizarClientasDeuda);
 clubRegistrarAbonoButton.addEventListener("click", async () => {
@@ -1986,6 +2034,7 @@ function renderizarCitas() {
 		});
 		guardar.addEventListener("click", async () => {
 			guardar.disabled = true;
+			mensajeCitaPersistente = "";
 			try {
 				await cambiarEstadoCita(cita, estado.value);
 				citasAdminMensaje.textContent = "Estado actualizado.";
@@ -1997,10 +2046,57 @@ function renderizarCitas() {
 				guardar.disabled = false;
 			}
 		});
-		accionCelda.append(guardar);
+		const eliminar = document.createElement("button");
+		eliminar.type = "button";
+		eliminar.className = "caja-cita-eliminar";
+		eliminar.textContent = "Eliminar";
+		eliminar.setAttribute("aria-label", `Eliminar cita de ${titular.nombre || "clienta"} del ${fechaLegible(cita.fecha)} a las ${cita.hora}`);
+		eliminar.addEventListener("click", async () => {
+			eliminar.disabled = true;
+			try {
+				const eliminada = await eliminarCita(cita);
+				if (!eliminada) eliminar.disabled = false;
+			} catch (error) {
+				console.error("No se pudo eliminar la cita.", error);
+				mensajeCitaPersistente = "";
+				citasAdminMensaje.textContent = error.message || "No se pudo eliminar la cita.";
+				citasAdminMensaje.classList.add("es-error");
+				eliminar.disabled = false;
+			}
+		});
+		accionCelda.append(guardar, eliminar);
 		fila.append(estadoCelda, accionCelda);
 		agendaCitasLista.append(fila);
 	}
+}
+
+async function eliminarCita(cita) {
+	if (!esAdministradora()) throw new Error("Inicia sesión con una cuenta autorizada antes de eliminar una cita.");
+	const titular = cita.datos?.titular || {};
+	const nombre = titular.nombre || "Clienta";
+	const fechaHora = `${fechaLegible(cita.fecha)} ${cita.hora}`;
+	if (!window.confirm(`¿Seguro que deseas eliminar definitivamente esta cita de ${nombre} (${fechaHora})?`)) {
+		return false;
+	}
+
+	const ocupacionIds = [...new Set(Array.isArray(cita.ocupacionIds) ? cita.ocupacionIds : [])];
+	if (ocupacionIds.some((id) => typeof id !== "string" || !id || id.includes("/"))) {
+		throw new Error("La cita contiene identificadores de horario inválidos; no se eliminó ningún documento.");
+	}
+	const batch = writeBatch(db);
+	batch.delete(doc(db, "citas", cita.id));
+	batch.delete(doc(db, "citas_datos", cita.id));
+	for (const ocupacionId of ocupacionIds) {
+		batch.delete(doc(db, "agenda_ocupacion", ocupacionId));
+	}
+	await batch.commit();
+
+	citasAgenda = citasAgenda.filter((item) => item.id !== cita.id);
+	renderizarCitas();
+	mensajeCitaPersistente = "✅ Cita eliminada correctamente y horario liberado";
+	citasAdminMensaje.textContent = mensajeCitaPersistente;
+	citasAdminMensaje.classList.remove("es-error");
+	return true;
 }
 
 function incrementarHistorial(datos, titular, referidaPor = "") {
@@ -2195,7 +2291,7 @@ function escucharCitas(usuario) {
 			if (!usuarioActual || usuarioActual.uid !== usuario.uid) return;
 			citasAgenda = cargadas;
 			renderizarCitas();
-			citasAdminMensaje.textContent = "";
+			citasAdminMensaje.textContent = mensajeCitaPersistente;
 			await cargarEstadisticasAgenda(citasAgenda);
 		} catch (error) {
 			console.error("No se pudieron cargar los datos de agenda.", error);

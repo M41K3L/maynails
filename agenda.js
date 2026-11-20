@@ -9,11 +9,11 @@ import {
 	where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-const EMAILJS_SERVICE_ID = "YOUR_EMAILJS_SERVICE_ID";
-const EMAILJS_TEMPLATE_ID = "YOUR_EMAILJS_TEMPLATE_ID";
-const EMAILJS_TEMPLATE_ID_ADMIN = "YOUR_EMAILJS_ADMIN_TEMPLATE_ID";
-const EMAILJS_TEMPLATE_ID_CLIENTE = "YOUR_EMAILJS_CLIENT_TEMPLATE_ID";
-const EMAILJS_PUBLIC_KEY = "YOUR_EMAILJS_PUBLIC_KEY";
+const EMAILJS_SERVICE_ID = "service_j43z63s";
+const EMAILJS_TEMPLATE_ID = "template_uj5rara";
+const EMAILJS_TEMPLATE_ID_ADMIN = "template_uj5rara";
+const EMAILJS_TEMPLATE_ID_CLIENTE = "template_uj5rara";
+const EMAILJS_PUBLIC_KEY = "vsuRicFwrzOHSbliL";
 const ADMIN_EMAIL = "mayracmarin25@gmail.com";
 const citasRef = collection(db, "citas");
 const configRef = collection(db, "config_agenda");
@@ -550,16 +550,19 @@ formulario.addEventListener("submit", async (evento) => {
 			google_calendar_url: enlaces.google_calendar_url,
 			ics_data_url: enlaces.ics_data_url
 		};
-		void enviarCorreo(plantillaEmail(EMAILJS_TEMPLATE_ID_ADMIN), {
-			...parametrosCorreo,
-			to_email: ADMIN_EMAIL
-		}, "la administradora");
+		const enviosCorreo = [
+			enviarCorreo(plantillaEmail(EMAILJS_TEMPLATE_ID_ADMIN), {
+				...parametrosCorreo,
+				to_email: ADMIN_EMAIL
+			}, "la administradora")
+		];
 		if (email) {
-			void enviarCorreo(plantillaEmail(EMAILJS_TEMPLATE_ID_CLIENTE), {
+			enviosCorreo.push(enviarCorreo(plantillaEmail(EMAILJS_TEMPLATE_ID_CLIENTE), {
 				...parametrosCorreo,
 				to_email: email
-			}, "la clienta");
+			}, "la clienta"));
 		}
+		void Promise.allSettled(enviosCorreo);
 		formulario.reset();
 		referidasLista.replaceChildren();
 		fechaInput.min = fechaLocal();

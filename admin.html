@@ -218,9 +218,14 @@
 			<section class="caja-panel caja-historial" aria-labelledby="historial-titulo">
 				<div class="caja-panel-cabecera caja-historial-cabecera">
 					<div><span class="tag">Editar / Historial de Movimientos</span><h2 id="historial-titulo">Historial de movimientos</h2></div>
-					<button id="exportar-xlsx" class="caja-exportar" type="button">Exportar a Excel (.xlsx)</button>
+					<div class="caja-historial-acciones">
+						<button id="toggle-historial-movimientos" class="caja-historial-toggle" type="button" aria-expanded="false" aria-controls="historial-contenido">Ver historial de movimientos (0 registros)</button>
+						<button id="exportar-xlsx" class="caja-exportar" type="button">Exportar a Excel (.xlsx)</button>
+					</div>
 				</div>
-				<div class="caja-filtros-historial">
+				<div id="historial-contenido" class="caja-historial-contenido">
+					<div class="caja-historial-interior">
+						<div class="caja-filtros-historial">
 					<label>Tipo
 						<select id="filtro-tipo-movimiento">
 							<option value="" selected>Todos</option>
@@ -235,7 +240,7 @@
 						<input id="filtro-mes-movimiento" type="month">
 					</label>
 					<button id="limpiar-filtros-movimiento" class="caja-exportar" type="button">Limpiar filtros</button>
-				</div>
+						</div>
 				<form id="editar-movimiento-form" class="caja-formulario caja-editar-formulario" hidden>
 					<div class="caja-editar-titulo"><h3>Editar movimiento</h3><button id="cancelar-edicion-movimiento" class="caja-eliminar" type="button">Cancelar</button></div>
 					<input name="id" type="hidden">
@@ -291,6 +296,7 @@
 						<tbody id="movimientos-lista"></tbody>
 					</table>
 					<p id="historial-vacio" class="caja-vacio">Todavía no hay movimientos registrados.</p>
+					</div>
 				</div>
 			</section>
 			</div>

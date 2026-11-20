@@ -113,6 +113,14 @@ section{padding:76px 8%}
 .caja-exportar{padding:10px 14px;border:1px solid var(--rosa);background:transparent;color:var(--rosa);font:inherit;font-size:.86rem;cursor:pointer}
 .caja-exportar:hover{border-color:var(--rosa-hover);background:var(--rosa-hover);color:var(--texto-boton)}
 .caja-tabla-contenedor{overflow-x:auto}
+.caja-historial-acciones{display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+.caja-historial-toggle{min-height:44px;padding:10px 14px;border:1px solid var(--borde);background:var(--fondo);color:var(--rosa);font:inherit;font-size:.88rem;cursor:pointer;transition:background-color .2s,border-color .2s}
+.caja-historial-toggle:hover{border-color:var(--rosa);background:var(--suave)}
+.caja-historial-toggle:focus-visible{outline:2px solid var(--rosa);outline-offset:3px}
+.caja-historial-contenido{display:grid;grid-template-rows:0fr;visibility:hidden;transition:grid-template-rows .3s ease,visibility .3s}
+.caja-historial-contenido.is-open{grid-template-rows:1fr;visibility:visible}
+.caja-historial-interior{min-width:0;min-height:0;overflow:hidden}
+.caja-historial-contenido .caja-tabla-contenedor{min-width:0;max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
 .caja-tabla{width:100%;border-collapse:collapse;text-align:left;font-size:.88rem}
 .caja-tabla th,.caja-tabla td{padding:13px 12px;border-bottom:1px solid var(--borde);vertical-align:middle}
 .caja-tabla th{background:var(--suave);color:var(--rosa);font-size:.78rem;font-weight:500;letter-spacing:.04em}
@@ -357,6 +365,10 @@ footer{padding:34px 8%;background:var(--fondo);color:var(--texto-suave);font-siz
 .agenda-lista-metricas{margin-bottom:0}
 .agenda-citas-tabla{min-width:840px}
 .agenda-citas-tabla select{min-height:38px;padding:6px;border:1px solid var(--borde);background:var(--fondo);color:var(--texto);font:inherit}
+.caja-cita-eliminar{margin:4px;padding:8px 11px;border:1px solid #8b2f3c;background:transparent;color:#8b2f3c;font:inherit;font-size:.82rem;cursor:pointer}
+.caja-cita-eliminar:hover{border-color:#6e212a;background:#6e212a;color:#fff}
+.caja-cita-eliminar:focus-visible{outline:2px solid #8b2f3c;outline-offset:3px}
+.caja-cita-eliminar:disabled{opacity:.55;cursor:wait}
 .admin-agenda-panel{padding:0}
 .admin-agenda-panel>.caja-panel{margin-bottom:24px}
 @media(max-width:700px){.agenda-admin-form{grid-template-columns:repeat(2,minmax(0,1fr))}.agenda-referidas-cabecera{align-items:flex-start;flex-direction:column}.agenda-metricas{grid-template-columns:1fr}.agenda-estadisticas-grid{grid-template-columns:1fr}}
