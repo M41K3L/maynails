@@ -9,6 +9,11 @@ import {
 	where
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+const EMAILJS_SERVICE_ID = "YOUR_EMAILJS_SERVICE_ID";
+const EMAILJS_TEMPLATE_ID_ADMIN = "YOUR_EMAILJS_ADMIN_TEMPLATE_ID";
+const EMAILJS_TEMPLATE_ID_CLIENTE = "YOUR_EMAILJS_CLIENT_TEMPLATE_ID";
+const EMAILJS_PUBLIC_KEY = "YOUR_EMAILJS_PUBLIC_KEY";
+const ADMIN_EMAIL = "mayracmarin25@gmail.com";
 const citasRef = collection(db, "citas");
 const configRef = collection(db, "config_agenda");
 const ocupacionRef = collection(db, "agenda_ocupacion");
@@ -21,12 +26,119 @@ const referidasLista = document.getElementById("referidas-lista");
 const tiempoTotal = document.getElementById("tiempo-total");
 const disponibilidadMensaje = document.getElementById("agenda-disponibilidad");
 const agendaMensaje = document.getElementById("agenda-mensaje");
+const enlacesCalendario = document.getElementById("agenda-enlaces-calendario");
+const googleCalendarLink = document.getElementById("agenda-google-calendar");
+const descargarIcsLink = document.getElementById("agenda-descargar-ics");
 const submitButton = document.getElementById("reservar-cita");
 const SERVICIOS_MANOS = new Set(["Manicure", "Nivelación", "Softgel", "Jelly", "Dual", "Acrílico"]);
 const SERVICIOS_PIES = new Set(["Pedicure", "Quiropedia", "Láser"]);
 let duracionTotal = 0;
 let cargaDisponibilidad = 0;
 let horaSeleccionada = "";
+let emailJsPromise = null;
+let emailJsInicializado = false;
+
+function emailJsConfigurado(templateId) {
+	return Boolean(
+		EMAILJS_SERVICE_ID &&
+		templateId &&
+		EMAILJS_PUBLIC_KEY &&
+		![EMAILJS_SERVICE_ID, templateId, EMAILJS_PUBLIC_KEY]
+			.some((valor) => valor.startsWith("YOUR_"))
+	);
+}
+
+function cargarEmailJs() {
+	if (window.emailjs) return Promise.resolve(window.emailjs);
+	if (!emailJsPromise) {
+		emailJsPromise = new Promise((resolve, reject) => {
+			const script = document.createElement("script");
+			script.src = "https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js";
+			script.onload = () => window.emailjs
+				? resolve(window.emailjs)
+				: reject(new Error("El SDK de EmailJS no quedó disponible."));
+			script.onerror = () => reject(new Error("No se pudo cargar el SDK de EmailJS."));
+			document.head.append(script);
+		});
+	}
+	return emailJsPromise;
+}
+
+async function enviarCorreo(templateId, parametros, destino) {
+	if (!emailJsConfigurado(templateId)) {
+		console.info(`EmailJS no está configurado; se omite el correo de ${destino}.`);
+		return;
+	}
+	try {
+		const emailjs = await cargarEmailJs();
+		if (!emailJsInicializado) {
+			emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
+			emailJsInicializado = true;
+		}
+		await emailjs.send(EMAILJS_SERVICE_ID, templateId, parametros);
+		console.info(`Notificación por correo enviada a ${destino}.`);
+	} catch (error) {
+		console.error(`No se pudo enviar el correo de ${destino}; la reserva sí quedó guardada.`, error);
+	}
+}
+
+function escaparIcs(valor) {
+	return String(valor || "")
+		.replace(/\\/g, "\\\\")
+		.replace(/\r?\n/g, "\\n")
+		.replace(/,/g, "\\,")
+		.replace(/;/g, "\\;");
+}
+
+function fechaIcs(fecha) {
+	return fecha.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+}
+
+function crearEnlacesCalendario({ fecha, hora, duracion, nombre, servicios, acompanantes, notas }) {
+	const [anio, mes, dia] = fecha.split("-").map(Number);
+	const [horas, minutos] = hora.split(":").map(Number);
+	const inicio = new Date(anio, mes - 1, dia, horas, minutos);
+	const fin = new Date(inicio.getTime() + duracion * 60000);
+	const fechasGoogle = `${fechaIcs(inicio)}/${fechaIcs(fin)}`;
+	const detalles = [
+		`Clienta: ${nombre}`,
+		`Servicios: ${servicios}`,
+		`Duración: ${formatoDuracion(duracion)}`,
+		`Acompañantes: ${acompanantes || "Ninguna"}`,
+		notas ? `Notas: ${notas}` : ""
+	].filter(Boolean).join("\n");
+	const googleUrl = new URL("https://calendar.google.com/calendar/render");
+	googleUrl.search = new URLSearchParams({
+		action: "TEMPLATE",
+		text: "Cita en MayNails Studio",
+		dates: fechasGoogle,
+		details
+	}).toString();
+	const ics = [
+		"BEGIN:VCALENDAR",
+		"VERSION:2.0",
+		"PRODID:-//MayNails Studio//Agenda//ES",
+		"BEGIN:VEVENT",
+		`UID:maynails-${Date.now()}@maynails.studio`,
+		`DTSTAMP:${fechaIcs(new Date())}`,
+		`DTSTART:${fechaIcs(inicio)}`,
+		`DTEND:${fechaIcs(fin)}`,
+		"SUMMARY:Cita en MayNails Studio",
+		`DESCRIPTION:${escaparIcs(detalles)}`,
+		"END:VEVENT",
+		"END:VCALENDAR"
+	].join("\r\n");
+	return {
+		google_calendar_url: googleUrl.href,
+		ics_data_url: `data:text/calendar;charset=utf-8,${encodeURIComponent(ics)}`
+	};
+}
+
+function mostrarEnlacesCalendario(enlaces) {
+	googleCalendarLink.href = enlaces.google_calendar_url;
+	descargarIcsLink.href = enlaces.ics_data_url;
+	enlacesCalendario.hidden = false;
+}
 
 function fechaLocal() {
 	const ahora = new Date();
@@ -308,18 +420,49 @@ formulario.addEventListener("submit", async (evento) => {
 
 	submitButton.disabled = true;
 	mostrarMensaje(agendaMensaje, "Confirmando disponibilidad y enviando tu solicitud…");
+	enlacesCalendario.hidden = true;
 	try {
 		const fecha = fechaInput.value;
 		const hora = horaInput.value;
+		const nombre = titularNombreInput.value.trim();
+		const telefono = personas[0].telefono;
+		const email = formulario.elements.email.value.trim();
+		const notas = formulario.elements.notas.value.trim();
 		const inicioMinutos = minutosDeHora(hora);
 		const finMinutos = inicioMinutos + duracionTotal;
+		const servicios = personas.flatMap((persona) => persona.servicios);
+		const resumenServicios = servicios.join(", ");
+		const acompanantes = personas.slice(1)
+			.map((persona) => `${persona.nombre} (${persona.servicios.join(", ")})`)
+			.join("; ");
+		const enlaces = crearEnlacesCalendario({
+			fecha,
+			hora,
+			duracion: duracionTotal,
+			nombre,
+			servicios: resumenServicios,
+			acompanantes,
+			notas
+		});
+		const parametrosCorreo = {
+			cliente_nombre: nombre,
+			cliente_telefono: telefono,
+			cliente_email: email || "No indicado",
+			servicios: resumenServicios,
+			acompanantes: acompanantes || "Ninguna",
+			fecha,
+			hora,
+			duracion: formatoDuracion(duracionTotal),
+			notas: notas || "Sin notas",
+			google_calendar_url: enlaces.google_calendar_url,
+			ics_data_url: enlaces.ics_data_url
+		};
 		const idsOcupacion = [];
 		for (let minuto = inicioMinutos; minuto < finMinutos; minuto += 30) {
 			idsOcupacion.push(`${fecha}_${horaTexto(minuto).replace(":", "")}`);
 		}
 		const citaRef = doc(citasRef);
 		const datosRef = doc(db, "citas_datos", citaRef.id);
-		const servicios = personas.flatMap((persona) => persona.servicios);
 		await runTransaction(db, async (transaccion) => {
 			const ocupaciones = await Promise.all(idsOcupacion.map((id) =>
 				transaccion.get(doc(ocupacionRef, id))
@@ -353,6 +496,17 @@ formulario.addEventListener("submit", async (evento) => {
 				});
 			}
 		});
+		mostrarEnlacesCalendario(enlaces);
+		void enviarCorreo(EMAILJS_TEMPLATE_ID_ADMIN, {
+			...parametrosCorreo,
+			to_email: ADMIN_EMAIL
+		}, "la administradora");
+		if (email) {
+			void enviarCorreo(EMAILJS_TEMPLATE_ID_CLIENTE, {
+				...parametrosCorreo,
+				to_email: email
+			}, "la clienta");
+		}
 		formulario.reset();
 		referidasLista.replaceChildren();
 		fechaInput.min = fechaLocal();

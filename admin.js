@@ -97,6 +97,8 @@ const TASAS_STORAGE_KEY = "maynails-tasas-caja";
 let movimientos = [];
 let usuarioActual = null;
 let cancelarMovimientos = null;
+let movimientoEditandoId = null;
+let guardandoEdicionMovimiento = false;
 let inicioSesionEnCurso = false;
 let tasasPorFecha = {};
 
@@ -765,12 +767,21 @@ function actualizarTasaEdicionDesdeFecha() {
 }
 
 function editarMovimiento(id) {
+	if (guardandoEdicionMovimiento) return;
 	const movimiento = movimientos.find((item) => item.id === id);
 	if (!movimiento) return;
+	const tipoNormalizado = String(movimiento.tipo || "").trim().toLowerCase();
+	if (!["ingreso", "gasto"].includes(tipoNormalizado)) {
+		const texto = "No se puede editar: el tipo de movimiento guardado no es válido.";
+		mostrarMensaje(texto, true);
+		window.alert(texto);
+		return;
+	}
+	movimientoEditandoId = movimiento.id;
 	formularioEdicion.hidden = false;
 	formularioEdicion.elements.id.value = movimiento.id;
 	formularioEdicion.elements.fecha.value = movimiento.fecha;
-	formularioEdicion.elements.tipo.value = movimiento.tipo;
+	formularioEdicion.elements.tipo.value = tipoNormalizado;
 	formularioEdicion.elements.concepto.value = movimiento.concepto;
 	formularioEdicion.elements.categoria.value = CATEGORIAS.includes(movimiento.categoria)
 		? movimiento.categoria
@@ -788,8 +799,10 @@ function editarMovimiento(id) {
 }
 
 function cancelarEdicion() {
+	if (guardandoEdicionMovimiento) return;
 	formularioEdicion.reset();
 	formularioEdicion.hidden = true;
+	movimientoEditandoId = null;
 }
 
 form.elements.tipo.addEventListener("change", () => mostrarCategoriaGasto(form, categoriaGastoCampo));
@@ -968,50 +981,86 @@ formularioEdicion.addEventListener("submit", async (evento) => {
 		return;
 	}
 	const datos = new FormData(formularioEdicion);
-	const id = String(datos.get("id"));
-	const metodo = String(datos.get("metodo"));
-	const tipoTasa = String(datos.get(esMetodoEnBolivares(metodo) ? "tipoTasa" : "tipoTasaDivisa"));
-	const tipo = String(datos.get("tipo"));
-	const concepto = String(datos.get("concepto")).trim();
-	const categoriaGasto = tipo === "gasto" ? String(datos.get("categoriaGasto")) : "";
-	if (!concepto || (tipo === "gasto" && !CATEGORIAS_GASTO.includes(categoriaGasto))) {
-		mostrarMensaje("Completa el concepto y selecciona una categoría de gasto válida.", true);
+	const id = movimientoEditandoId;
+	if (!id) {
+		mostrarMensaje("No hay un movimiento seleccionado para editar. Vuelve a abrir la edición.", true);
+		window.alert("No hay un movimiento seleccionado para editar. Vuelve a abrir la edición.");
 		return;
 	}
+	const metodo = String(formularioEdicion.elements.metodo.value).trim();
+	const tipoTasa = String(datos.get(esMetodoEnBolivares(metodo) ? "tipoTasa" : "tipoTasaDivisa"));
+	const tipo = String(formularioEdicion.elements.tipo.value || "").trim().toLowerCase();
+	const fecha = String(formularioEdicion.elements.fecha.value || "").trim();
+	const concepto = String(formularioEdicion.elements.concepto.value || "").trim();
+	const categoria = String(formularioEdicion.elements.categoria.value || "").trim();
+	const categoriaGasto = tipo === "gasto" ? String(datos.get("categoriaGasto")) : "";
+	if (!["ingreso", "gasto"].includes(tipo) || !fecha || !concepto ||
+		!CATEGORIAS.includes(categoria) ||
+		(tipo === "gasto" && !CATEGORIAS_GASTO.includes(categoriaGasto))) {
+		const texto = "Revisa el tipo, la fecha, el concepto y las categorías del movimiento.";
+		mostrarMensaje(texto, true);
+		window.alert(texto);
+		return;
+	}
+	const tasasGuardadas = tasasDeFecha(fecha);
+	if (!tasasGuardadas) {
+		const texto = `No hay una Tasa BCV válida guardada para ${formatearFecha(fecha)}.`;
+		mostrarMensaje(texto, true);
+		window.alert(texto);
+		return;
+	}
+	const tasaIngresada = normalizarDecimal(formularioEdicion.elements.tasaUsada.value);
+	const tasaRespaldo = tasasGuardadas[tipoTasa] || tasasGuardadas.BCV;
 	let importes;
 	try {
 		importes = calcularImportes({
 			metodo,
-			fecha: String(datos.get("fecha")),
+			fecha,
 			tipoTasa,
-			montoEntrada: datos.get("montoUsd"),
-			montoBsEntrada: datos.get("montoBs"),
-			tasaOverride: normalizarDecimal(datos.get("tasaUsada"))
+			montoEntrada: formularioEdicion.elements.montoUsd.value,
+			montoBsEntrada: formularioEdicion.elements.montoBs.value,
+			tasaOverride: Number.isFinite(tasaIngresada) && tasaIngresada > 0
+				? tasaIngresada
+				: tasaRespaldo
 		});
 	} catch (error) {
-		mostrarMensaje(error.message, true);
+		const texto = error instanceof Error ? error.message : String(error);
+		mostrarMensaje(texto, true);
+		window.alert(texto);
 		return;
 	}
 	const botonGuardar = formularioEdicion.querySelector("button[type='submit']");
+	const botonCancelar = document.getElementById("cancelar-edicion-movimiento");
+	guardandoEdicionMovimiento = true;
 	botonGuardar.disabled = true;
+	botonCancelar.disabled = true;
 	try {
 		const payload = {
-			fecha: String(datos.get("fecha")),
+			fecha,
 			tipo,
 			concepto,
-			categoria: String(datos.get("categoria")),
+			categoria,
 			categoriaGasto,
 			metodo,
 			...importes,
-			tasaBcv: obtenerTasa("BCV") ?? 0,
-			tasaEuro: obtenerTasa("EURO") ?? 0,
-			tasaUsdt: obtenerTasa("USDT") ?? 0,
+			tasaBcv: tasasGuardadas.BCV,
+			tasaEuro: tasasGuardadas.EURO,
+			tasaUsdt: tasasGuardadas.USDT,
 			equivalenteUsd: importes.montoUsd,
 			updatedAt: serverTimestamp()
 		};
 		console.log("Intentando guardar:", payload);
 		await updateDoc(doc(db, "movimientos", id), payload);
+		movimientos = movimientos.map((movimiento) =>
+			movimiento.id === id
+				? { ...movimiento, ...payload, updatedAt: new Date(), createdAt: movimiento.createdAt }
+				: movimiento
+		);
+		guardandoEdicionMovimiento = false;
+		botonCancelar.disabled = false;
 		cancelarEdicion();
+		actualizarResumen();
+		renderizarHistorial();
 		mostrarMensaje("Movimiento actualizado correctamente.", false);
 	} catch (error) {
 		console.error("No se pudo actualizar el movimiento de Firestore.", error);
@@ -1020,6 +1069,8 @@ formularioEdicion.addEventListener("submit", async (evento) => {
 		mostrarMensaje(`Error de Firebase: ${code} - ${detail}`, true);
 		window.alert(`Error de Firebase: ${code} - ${detail}`);
 	} finally {
+		guardandoEdicionMovimiento = false;
+		botonCancelar.disabled = false;
 		botonGuardar.disabled = false;
 	}
 });

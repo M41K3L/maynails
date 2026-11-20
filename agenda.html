@@ -30,6 +30,9 @@
 						<label>Teléfono
 							<input name="telefono" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="Ej. 584241234567" required>
 						</label>
+						<label>Correo electrónico (opcional)
+							<input name="email" type="email" maxlength="254" autocomplete="email" placeholder="tu@correo.com">
+						</label>
 					</div>
 				</fieldset>
 				<fieldset class="agenda-grupo">
@@ -74,8 +77,16 @@
 					</div>
 					<p id="agenda-disponibilidad" class="agenda-mensaje" role="status" aria-live="polite"></p>
 				</fieldset>
+				<label class="agenda-notas">Notas para el estudio (opcional)
+					<textarea name="notas" rows="3" maxlength="500" placeholder="Cuéntanos si necesitas considerar algo para tu cita."></textarea>
+				</label>
 				<button id="reservar-cita" class="boton agenda-submit" type="submit">Solicitar reserva</button>
 				<p id="agenda-mensaje" class="agenda-mensaje" role="status" aria-live="polite"></p>
+				<div id="agenda-enlaces-calendario" class="agenda-enlaces-calendario" hidden>
+					<p>Guarda la fecha en tu calendario:</p>
+					<a id="agenda-google-calendar" class="boton" target="_blank" rel="noopener">Añadir a Google Calendar</a>
+					<a id="agenda-descargar-ics" class="caja-exportar" download="maynails-cita.ics">Descargar evento (.ics)</a>
+				</div>
 			</form>
 			<div class="mapa-card">
 				<span class="mapa-icono" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"></path><circle cx="12" cy="10" r="2.5"></circle></svg></span>
