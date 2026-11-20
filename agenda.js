@@ -94,26 +94,29 @@ function fechaIcs(fecha) {
 	return fecha.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
 }
 
-function crearEnlacesCalendario({ fecha, hora, duracion, nombre, servicios, acompanantes, notas }) {
+function crearEnlacesCalendario({ fecha, hora, duracion, nombre, telefono, servicios, acompanantes, notas }) {
 	const [anio, mes, dia] = fecha.split("-").map(Number);
 	const [horas, minutos] = hora.split(":").map(Number);
 	const inicio = new Date(anio, mes - 1, dia, horas, minutos);
 	const fin = new Date(inicio.getTime() + duracion * 60000);
+	if (!Number.isFinite(inicio.getTime()) || !Number.isFinite(fin.getTime()) || duracion <= 0) {
+		throw new Error("No se pudo calcular la fecha y duración del evento.");
+	}
 	const fechasGoogle = `${fechaIcs(inicio)}/${fechaIcs(fin)}`;
-	const detalles = [
+	const details = [
 		`Clienta: ${nombre}`,
+		`Teléfono: ${telefono || "No indicado"}`,
 		`Servicios: ${servicios}`,
 		`Duración: ${formatoDuracion(duracion)}`,
 		`Acompañantes: ${acompanantes || "Ninguna"}`,
 		notas ? `Notas: ${notas}` : ""
 	].filter(Boolean).join("\n");
-	const googleUrl = new URL("https://calendar.google.com/calendar/render");
-	googleUrl.search = new URLSearchParams({
-		action: "TEMPLATE",
-		text: "Cita en MayNails Studio",
-		dates: fechasGoogle,
-		details
-	}).toString();
+	const googleUrl = [
+		"https://calendar.google.com/calendar/render?action=TEMPLATE",
+		`&text=${encodeURIComponent("Cita en MayNails Studio")}`,
+		`&dates=${encodeURIComponent(fechasGoogle)}`,
+		`&details=${encodeURIComponent(details)}`
+	].join("");
 	const ics = [
 		"BEGIN:VCALENDAR",
 		"VERSION:2.0",
@@ -124,12 +127,12 @@ function crearEnlacesCalendario({ fecha, hora, duracion, nombre, servicios, acom
 		`DTSTART:${fechaIcs(inicio)}`,
 		`DTEND:${fechaIcs(fin)}`,
 		"SUMMARY:Cita en MayNails Studio",
-		`DESCRIPTION:${escaparIcs(detalles)}`,
+		`DESCRIPTION:${escaparIcs(details)}`,
 		"END:VEVENT",
 		"END:VCALENDAR"
 	].join("\r\n");
 	return {
-		google_calendar_url: googleUrl.href,
+		google_calendar_url: googleUrl,
 		ics_data_url: `data:text/calendar;charset=utf-8,${encodeURIComponent(ics)}`
 	};
 }
@@ -435,28 +438,6 @@ formulario.addEventListener("submit", async (evento) => {
 		const acompanantes = personas.slice(1)
 			.map((persona) => `${persona.nombre} (${persona.servicios.join(", ")})`)
 			.join("; ");
-		const enlaces = crearEnlacesCalendario({
-			fecha,
-			hora,
-			duracion: duracionTotal,
-			nombre,
-			servicios: resumenServicios,
-			acompanantes,
-			notas
-		});
-		const parametrosCorreo = {
-			cliente_nombre: nombre,
-			cliente_telefono: telefono,
-			cliente_email: email || "No indicado",
-			servicios: resumenServicios,
-			acompanantes: acompanantes || "Ninguna",
-			fecha,
-			hora,
-			duracion: formatoDuracion(duracionTotal),
-			notas: notas || "Sin notas",
-			google_calendar_url: enlaces.google_calendar_url,
-			ics_data_url: enlaces.ics_data_url
-		};
 		const idsOcupacion = [];
 		for (let minuto = inicioMinutos; minuto < finMinutos; minuto += 30) {
 			idsOcupacion.push(`${fecha}_${horaTexto(minuto).replace(":", "")}`);
@@ -496,7 +477,35 @@ formulario.addEventListener("submit", async (evento) => {
 				});
 			}
 		});
-		mostrarEnlacesCalendario(enlaces);
+		let enlaces = { google_calendar_url: "", ics_data_url: "" };
+		try {
+			enlaces = crearEnlacesCalendario({
+				fecha,
+				hora,
+				duracion: duracionTotal,
+				nombre,
+				telefono,
+				servicios: resumenServicios,
+				acompanantes,
+				notas
+			});
+			mostrarEnlacesCalendario(enlaces);
+		} catch (error) {
+			console.error("La cita se guardó, pero no se pudieron generar los enlaces de calendario.", error);
+		}
+		const parametrosCorreo = {
+			cliente_nombre: nombre,
+			cliente_telefono: telefono,
+			cliente_email: email || "No indicado",
+			servicios: resumenServicios,
+			acompanantes: acompanantes || "Ninguna",
+			fecha,
+			hora,
+			duracion: formatoDuracion(duracionTotal),
+			notas: notas || "Sin notas",
+			google_calendar_url: enlaces.google_calendar_url,
+			ics_data_url: enlaces.ics_data_url
+		};
 		void enviarCorreo(EMAILJS_TEMPLATE_ID_ADMIN, {
 			...parametrosCorreo,
 			to_email: ADMIN_EMAIL
