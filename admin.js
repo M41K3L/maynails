@@ -54,12 +54,21 @@ const CATEGORIAS = [
 	"Insumos/Gastos"
 ];
 const CATEGORIAS_GASTO = [
-	"Limpieza",
-	"Café / Atención al cliente",
+	"Renta del local",
+	"Internet",
+	"Servicios (Luz / Agua / Aseo)",
 	"Materiales e insumos",
 	"Herramientas y equipos",
-	"Otros gastos"
+	"Transporte / Delivery",
+	"Otros"
 ];
+const PREFIJOS_INVENTARIO = {
+	"Líquido": "LIQ",
+	"Polvo": "POL",
+	"Gel": "GEL",
+	"Insumo": "INS",
+	"Herramienta": "HER"
+};
 const CATEGORIAS_CLIENTA = ["Clienta Antigua", "Clienta Fija", "Clienta Nueva"];
 const DIVISAS_TASA = { BCV: "USD", EURO: "EUR", USDT: "USDT" };
 const formatoDinero = new Intl.NumberFormat("en-US", {
@@ -95,8 +104,13 @@ const filtroMesMovimiento = document.getElementById("filtro-mes-movimiento");
 const historialContenido = document.getElementById("historial-contenido");
 const toggleHistorial = document.getElementById("toggle-historial-movimientos");
 const movimientosRef = collection(db, "movimientos");
+const inventarioRef = collection(db, "inventario");
 const TASAS_STORAGE_KEY = "maynails-tasas-caja";
 let movimientos = [];
+let inventario = [];
+let cancelarInventario = null;
+let guardandoInventario = false;
+let codigoInventarioEditadoManualmente = false;
 let historialAbierto = false;
 let ultimoCampoMontoEditado = "montoUsd";
 let usuarioActual = null;
@@ -107,13 +121,44 @@ let inicioSesionEnCurso = false;
 let tasasPorFecha = {};
 
 const panelCaja = document.getElementById("panel-caja");
+const panelInventario = document.getElementById("panel-inventario");
 const panelEstadisticas = document.getElementById("panel-estadisticas");
 const panelClub = document.getElementById("panel-club");
 const panelAgenda = document.getElementById("panel-agenda");
 const tabCaja = document.getElementById("tab-caja");
+const tabInventario = document.getElementById("tab-inventario");
 const tabEstadisticas = document.getElementById("tab-estadisticas");
 const tabClub = document.getElementById("tab-club");
 const tabAgenda = document.getElementById("tab-agenda");
+
+const subtabInventarioRegistro = document.getElementById("subtab-inventario-registro");
+const subtabInventarioStock = document.getElementById("subtab-inventario-stock");
+const subpanelInventarioRegistro = document.getElementById("subpanel-inventario-registro");
+const subpanelInventarioStock = document.getElementById("subpanel-inventario-stock");
+
+const formInventario = document.getElementById("form-inventario");
+const inventarioIdInput = document.getElementById("inventario-id");
+const inventarioNombreInput = document.getElementById("inventario-nombre");
+const inventarioSugerencias = document.getElementById("inventario-nombre-sugerencias");
+const inventarioTipoSelect = document.getElementById("inventario-tipo");
+const inventarioCategoriaSelect = document.getElementById("inventario-categoria");
+const inventarioAplicacionSelect = document.getElementById("inventario-aplicacion");
+const inventarioMarcaInput = document.getElementById("inventario-marca");
+const inventarioCodigoInput = document.getElementById("inventario-codigo");
+const inventarioCantidadInput = document.getElementById("inventario-cantidad");
+const inventarioStockMinimoInput = document.getElementById("inventario-stock-minimo");
+const btnRegenerarCodigo = document.getElementById("btn-regenerar-codigo");
+const btnGuardarInventario = document.getElementById("btn-guardar-inventario");
+const btnLimpiarInventario = document.getElementById("btn-limpiar-inventario");
+const inventarioMensaje = document.getElementById("inventario-mensaje");
+const inventarioFormTitulo = document.getElementById("inventario-form-titulo");
+
+const buscarStockInput = document.getElementById("buscar-stock");
+const filtroInventarioTipo = document.getElementById("filtro-inventario-tipo");
+const filtroInventarioCategoria = document.getElementById("filtro-inventario-categoria");
+const filtroInventarioStockBajo = document.getElementById("filtro-inventario-stock-bajo");
+const inventarioListaTbody = document.getElementById("inventario-lista-tbody");
+const inventarioVacio = document.getElementById("inventario-vacio");
 const agendaConfigForm = document.getElementById("agenda-config-form");
 const agendaBloqueoForm = document.getElementById("agenda-bloqueo-form");
 const agendaConfigMensaje = document.getElementById("agenda-config-mensaje");
@@ -978,18 +1023,37 @@ function actualizarResumen() {
 	);
 	document.getElementById("metodo-euro").textContent = formatoDinero.format(sumarMetodo(ingresos, "Efectivo Euro"));
 	document.getElementById("metodo-usdt").textContent = formatoDinero.format(sumarMetodo(ingresos, "Efectivo USDT"));
-	const totalesGastos = gastos.reduce((totales, movimiento) => {
-		const categoria = CATEGORIAS_GASTO.includes(movimiento.categoriaGasto)
-			? movimiento.categoriaGasto
-			: "Otros gastos";
-		totales[categoria] += Number(movimiento.montoUsd || movimiento.equivalenteUsd || 0);
-		return totales;
-	}, Object.fromEntries(CATEGORIAS_GASTO.map((categoria) => [categoria, 0])));
-	document.getElementById("gasto-limpieza").textContent = formatoDinero.format(totalesGastos["Limpieza"]);
-	document.getElementById("gasto-cafe").textContent = formatoDinero.format(totalesGastos["Café / Atención al cliente"]);
-	document.getElementById("gasto-materiales").textContent = formatoDinero.format(totalesGastos["Materiales e insumos"]);
-	document.getElementById("gasto-herramientas").textContent = formatoDinero.format(totalesGastos["Herramientas y equipos"]);
-	document.getElementById("gasto-otros").textContent = formatoDinero.format(totalesGastos["Otros gastos"]);
+	const totalesGastos = Object.fromEntries(CATEGORIAS_GASTO.map((cat) => [cat, 0]));
+	for (const movimiento of gastos) {
+		const monto = Number(movimiento.montoUsd || movimiento.equivalenteUsd || 0);
+		let cats = [];
+		if (Array.isArray(movimiento.categoriasGasto) && movimiento.categoriasGasto.length > 0) {
+			cats = movimiento.categoriasGasto;
+		} else if (typeof movimiento.categoriaGasto === "string" && movimiento.categoriaGasto.trim()) {
+			cats = movimiento.categoriaGasto.split(",").map((s) => s.trim()).filter(Boolean);
+		} else {
+			cats = ["Otros"];
+		}
+		const parte = cats.length > 0 ? (monto / cats.length) : monto;
+		for (const cat of cats) {
+			const catNorm = CATEGORIAS_GASTO.includes(cat) ? cat : "Otros";
+			totalesGastos[catNorm] = (totalesGastos[catNorm] || 0) + parte;
+		}
+	}
+	const elGastoRenta = document.getElementById("gasto-renta");
+	if (elGastoRenta) elGastoRenta.textContent = formatoDinero.format(totalesGastos["Renta del local"] || 0);
+	const elGastoInternet = document.getElementById("gasto-internet");
+	if (elGastoInternet) elGastoInternet.textContent = formatoDinero.format(totalesGastos["Internet"] || 0);
+	const elGastoServicios = document.getElementById("gasto-servicios");
+	if (elGastoServicios) elGastoServicios.textContent = formatoDinero.format(totalesGastos["Servicios (Luz / Agua / Aseo)"] || 0);
+	const elGastoMateriales = document.getElementById("gasto-materiales");
+	if (elGastoMateriales) elGastoMateriales.textContent = formatoDinero.format(totalesGastos["Materiales e insumos"] || 0);
+	const elGastoHerramientas = document.getElementById("gasto-herramientas");
+	if (elGastoHerramientas) elGastoHerramientas.textContent = formatoDinero.format(totalesGastos["Herramientas y equipos"] || 0);
+	const elGastoTransporte = document.getElementById("gasto-transporte");
+	if (elGastoTransporte) elGastoTransporte.textContent = formatoDinero.format(totalesGastos["Transporte / Delivery"] || 0);
+	const elGastoOtros = document.getElementById("gasto-otros");
+	if (elGastoOtros) elGastoOtros.textContent = formatoDinero.format(totalesGastos["Otros"] || 0);
 }
 
 function sumarMetodo(lista, metodo) {
@@ -1022,8 +1086,20 @@ function exportarXlsx() {
 	const gastosDelDia = delDia.filter((movimiento) => movimiento.tipo === "gasto");
 	const totalesGastos = Object.fromEntries(CATEGORIAS_GASTO.map((categoria) => [categoria, 0]));
 	for (const gasto of gastosDelDia) {
-		const categoria = CATEGORIAS_GASTO.includes(gasto.categoriaGasto) ? gasto.categoriaGasto : "Otros gastos";
-		totalesGastos[categoria] += gasto.montoUsd;
+		const monto = Number(gasto.montoUsd || gasto.equivalenteUsd || 0);
+		let cats = [];
+		if (Array.isArray(gasto.categoriasGasto) && gasto.categoriasGasto.length > 0) {
+			cats = gasto.categoriasGasto;
+		} else if (typeof gasto.categoriaGasto === "string" && gasto.categoriaGasto.trim()) {
+			cats = gasto.categoriaGasto.split(",").map((s) => s.trim()).filter(Boolean);
+		} else {
+			cats = ["Otros"];
+		}
+		const parte = cats.length > 0 ? (monto / cats.length) : monto;
+		for (const cat of cats) {
+			const catNorm = CATEGORIAS_GASTO.includes(cat) ? cat : "Otros";
+			totalesGastos[catNorm] = (totalesGastos[catNorm] || 0) + parte;
+		}
 	}
 	const ingresosDelDia = delDia.filter((movimiento) =>
 		movimiento.tipo === "ingreso" && !movimiento.esFiado && movimiento.metodo !== METODO_FIADO
@@ -1042,7 +1118,7 @@ function exportarXlsx() {
 	]);
 	hojaResumen["!cols"] = [{ wch: 34 }, { wch: 20 }];
 	hojaResumen["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }];
-	for (const address of ["B5", "B6", "B7", "B10", "B11", "B12", "B13", "B14"]) {
+	for (const address of ["B5", "B6", "B7", "B10", "B11", "B12", "B13", "B14", "B15", "B16"]) {
 		if (hojaResumen[address]) hojaResumen[address].z = '"$"#,##0.00';
 	}
 
@@ -1053,7 +1129,7 @@ function exportarXlsx() {
 			item.esFiado ? "Fiado pendiente" : item.tipo === "ingreso" ? "Ingreso" : "Egreso / Gasto",
 			item.concepto,
 			item.categoria,
-			item.categoriaGasto || "",
+			item.categoriaGasto || (Array.isArray(item.categoriasGasto) ? item.categoriasGasto.join(", ") : ""),
 			item.metodo,
 			item.montoUsd,
 			Number.isFinite(item.montoDivisa) ? item.montoDivisa : item.montoUsd,
@@ -1098,6 +1174,11 @@ function escucharMovimientos(usuario) {
 			.map((documento) => {
 				const datos = documento.data();
 				const montoUsd = Number(datos.montoUsd || datos.equivalenteUsd || datos.monto || 0);
+				const categoriasGastoArr = Array.isArray(datos.categoriasGasto)
+					? datos.categoriasGasto.filter((c) => typeof c === "string" && c.trim())
+					: typeof datos.categoriaGasto === "string" && datos.categoriaGasto.trim()
+						? datos.categoriaGasto.split(",").map((s) => s.trim()).filter(Boolean)
+						: [];
 				return {
 					...datos,
 					id: documento.id,
@@ -1110,7 +1191,8 @@ function escucharMovimientos(usuario) {
 					montoBs: Number.isFinite(datos.montoBs) ? datos.montoBs : null,
 					montoDivisa: Number.isFinite(datos.montoDivisa) ? datos.montoDivisa : null,
 					divisa: typeof datos.divisa === "string" ? datos.divisa : null,
-					categoriaGasto: typeof datos.categoriaGasto === "string" ? datos.categoriaGasto : "",
+					categoriasGasto: categoriasGastoArr,
+					categoriaGasto: categoriasGastoArr.join(", "),
 					tasaUsada: Number.isFinite(datos.tasaUsada) ? datos.tasaUsada : null,
 					tipoTasa: typeof datos.tipoTasa === "string" ? datos.tipoTasa : null,
 					esFiado: datos.esFiado === true
@@ -1121,7 +1203,6 @@ function escucharMovimientos(usuario) {
 				timestampMs(b.createdAt) - timestampMs(a.createdAt) ||
 				b.id.localeCompare(a.id)
 			);
-		console.log("Movimientos recibidos en UI:", movimientos.length);
 		actualizarResumen();
 		renderizarHistorial();
 		actualizarGraficas();
@@ -1179,15 +1260,36 @@ function calcularImportes({ metodo, fecha, tipoTasa, montoEntrada, montoBsEntrad
 	};
 }
 
-function mostrarCategoriaGasto(formulario, campo, valor) {
+function obtenerCategoriasGastoMarcadas(formulario) {
+	const nombreInput = formulario === formularioEdicion ? "editarCategoriasGastoCheck" : "categoriasGastoCheck";
+	return [...formulario.querySelectorAll(`input[name="${nombreInput}"]:checked`)]
+		.map((cb) => cb.value)
+		.filter((val) => CATEGORIAS_GASTO.includes(val));
+}
+
+function marcarCategoriasGasto(formulario, valores) {
+	const nombreInput = formulario === formularioEdicion ? "editarCategoriasGastoCheck" : "categoriasGastoCheck";
+	const lista = Array.isArray(valores)
+		? valores
+		: typeof valores === "string" && valores.trim()
+			? valores.split(",").map((s) => s.trim()).filter(Boolean)
+			: [];
+	for (const cb of formulario.querySelectorAll(`input[name="${nombreInput}"]`)) {
+		cb.checked = lista.includes(cb.value);
+	}
+}
+
+function mostrarCategoriaGasto(formulario, campo, valores = null) {
 	const esGasto = formulario.elements.tipo.value === "gasto";
 	campo.hidden = !esGasto;
-	formulario.elements.categoriaGasto.required = esGasto;
-	if (!esGasto) formulario.elements.categoriaGasto.value = "";
-	if (formulario === form) {
-		if (esGasto) formulario.elements.categoria.value = "Insumos/Gastos";
+	if (!esGasto) {
+		marcarCategoriasGasto(formulario, []);
+	} else if (valores !== null) {
+		marcarCategoriasGasto(formulario, valores);
 	}
-	if (valor && esGasto) formulario.elements.categoriaGasto.value = valor;
+	if (formulario === form && esGasto) {
+		formulario.elements.categoria.value = "Insumos/Gastos";
+	}
 }
 
 function actualizarCamposEdicion() {
@@ -1234,14 +1336,16 @@ function editarMovimiento(id) {
 	formularioEdicion.elements.categoria.value = CATEGORIAS.includes(movimiento.categoria)
 		? movimiento.categoria
 		: "Insumos/Gastos";
-	formularioEdicion.elements.categoriaGasto.value = movimiento.categoriaGasto || "";
 	formularioEdicion.elements.metodo.value = movimiento.metodo;
 	formularioEdicion.elements.montoUsd.value = movimiento.montoDivisa ?? movimiento.montoUsd;
 	formularioEdicion.elements.montoBs.value = Number.isFinite(movimiento.montoBs) ? movimiento.montoBs : "";
 	formularioEdicion.elements.tipoTasa.value = movimiento.tipoTasa || "BCV";
 	formularioEdicion.elements.tipoTasaDivisa.value = movimiento.tipoTasa || "BCV";
 	formularioEdicion.elements.tasaUsada.value = Number.isFinite(movimiento.tasaUsada) ? movimiento.tasaUsada : "";
-	mostrarCategoriaGasto(formularioEdicion, document.getElementById("editar-categoria-gasto-campo"), movimiento.categoriaGasto);
+	const catsIniciales = Array.isArray(movimiento.categoriasGasto) && movimiento.categoriasGasto.length > 0
+		? movimiento.categoriasGasto
+		: movimiento.categoriaGasto;
+	mostrarCategoriaGasto(formularioEdicion, document.getElementById("editar-categoria-gasto-campo"), catsIniciales);
 	actualizarCamposEdicion();
 	window.setTimeout(() => {
 		formularioEdicion.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1253,6 +1357,7 @@ function editarMovimiento(id) {
 function cancelarEdicion() {
 	if (guardandoEdicionMovimiento) return;
 	formularioEdicion.reset();
+	marcarCategoriasGasto(formularioEdicion, []);
 	formularioEdicion.hidden = true;
 	movimientoEditandoId = null;
 }
@@ -1327,13 +1432,14 @@ form.addEventListener("submit", async (evento) => {
 		window.alert(`No se pudo validar el movimiento: ${error.message || String(error)}`);
 		return;
 	}
-	const categoriaGasto = tipo === "gasto" ? String(datos.get("categoriaGasto")) : "";
-	if (tipo === "gasto" && !CATEGORIAS_GASTO.includes(categoriaGasto)) {
-		const texto = "Selecciona una categoría de gasto válida.";
+	const categoriasGastoSeleccionadas = tipo === "gasto" ? obtenerCategoriasGastoMarcadas(form) : [];
+	if (tipo === "gasto" && categoriasGastoSeleccionadas.length === 0) {
+		const texto = "Marca al menos una categoría de gasto con chulito.";
 		mostrarMensaje(texto, true);
 		window.alert(texto);
 		return;
 	}
+	const categoriaGasto = categoriasGastoSeleccionadas.join(", ");
 
 	const concepto = String(datos.get("concepto")).trim();
 	if (!concepto) {
@@ -1366,6 +1472,7 @@ form.addEventListener("submit", async (evento) => {
 		concepto,
 		categoria: String(datos.get("categoria")),
 		categoriaGasto,
+		categoriasGasto: categoriasGastoSeleccionadas,
 		metodo,
 		...importes,
 		...tasas,
@@ -1383,7 +1490,6 @@ form.addEventListener("submit", async (evento) => {
 			const saldoActual = Number.isFinite(clientaFiado.saldoPendienteUsd) ? clientaFiado.saldoPendienteUsd : 0;
 			const batch = writeBatch(db);
 			const movimientoRef = doc(collection(db, "movimientos"));
-			console.log("Intentando guardar:", movimiento);
 			batch.set(movimientoRef, movimiento);
 			batch.update(doc(db, "fidelidad", clientaFiado.docId), {
 				saldoPendienteUsd: increment(importes.montoUsd),
@@ -1399,7 +1505,6 @@ form.addEventListener("submit", async (evento) => {
 			actualizarTotalCuentasPorCobrar();
 			mostrarMensaje("✅ Fiado registrado y agregado a la cuenta por cobrar; no se sumó a caja.", false);
 		} else {
-			console.log("Intentando guardar:", movimiento);
 			await addDoc(collection(db, "movimientos"), movimiento);
 			mostrarMensaje("✅ Movimiento registrado correctamente", false);
 		}
@@ -1409,7 +1514,7 @@ form.addEventListener("submit", async (evento) => {
 		clientaFiadoCampo.hidden = true;
 		clientaFiadoSelect.required = false;
 		clientaFiadoSelect.value = "";
-		mostrarCategoriaGasto(form, categoriaGastoCampo);
+		mostrarCategoriaGasto(form, categoriaGastoCampo, []);
 		actualizarTasaSegunMetodo();
 		cargarTasasGuardadas(form.elements.fecha.value);
 		actualizarMontoConvertido();
@@ -1445,15 +1550,18 @@ formularioEdicion.addEventListener("submit", async (evento) => {
 	const fecha = String(formularioEdicion.elements.fecha.value || "").trim();
 	const concepto = String(formularioEdicion.elements.concepto.value || "").trim();
 	const categoria = String(formularioEdicion.elements.categoria.value || "").trim();
-	const categoriaGasto = tipo === "gasto" ? String(datos.get("categoriaGasto")) : "";
+	const categoriasGastoSeleccionadas = tipo === "gasto" ? obtenerCategoriasGastoMarcadas(formularioEdicion) : [];
 	if (!["ingreso", "gasto"].includes(tipo) || !fecha || !concepto ||
 		!CATEGORIAS.includes(categoria) ||
-		(tipo === "gasto" && !CATEGORIAS_GASTO.includes(categoriaGasto))) {
-		const texto = "Revisa el tipo, la fecha, el concepto y las categorías del movimiento.";
+		(tipo === "gasto" && categoriasGastoSeleccionadas.length === 0)) {
+		const texto = tipo === "gasto" && categoriasGastoSeleccionadas.length === 0
+			? "Marca al menos una categoría de gasto con chulito."
+			: "Revisa el tipo, la fecha, el concepto y las categorías del movimiento.";
 		mostrarMensaje(texto, true);
 		window.alert(texto);
 		return;
 	}
+	const categoriaGasto = categoriasGastoSeleccionadas.join(", ");
 	const tasasGuardadas = tasasDeFecha(fecha);
 	if (!tasasGuardadas) {
 		const texto = `No hay una Tasa BCV válida guardada para ${formatearFecha(fecha)}.`;
@@ -1493,6 +1601,7 @@ formularioEdicion.addEventListener("submit", async (evento) => {
 			concepto,
 			categoria,
 			categoriaGasto,
+			categoriasGasto: categoriasGastoSeleccionadas,
 			metodo,
 			...importes,
 			tasaBcv: tasasGuardadas.BCV,
@@ -1501,7 +1610,6 @@ formularioEdicion.addEventListener("submit", async (evento) => {
 			equivalenteUsd: importes.montoUsd,
 			updatedAt: serverTimestamp()
 		};
-		console.log("Intentando guardar:", payload);
 		await updateDoc(doc(db, "movimientos", id), payload);
 		movimientos = movimientos.map((movimiento) =>
 			movimiento.id === id
@@ -1535,7 +1643,7 @@ filtroMesMovimiento.value = "";
 cargarTasasGuardadas(form.elements.fecha.value);
 actualizarTasaSegunMetodo();
 actualizarCamposMoneda();
-mostrarCategoriaGasto(form, categoriaGastoCampo);
+mostrarCategoriaGasto(form, categoriaGastoCampo, []);
 form.elements.metodo.addEventListener("change", () => {
 	actualizarTasaSegunMetodo();
 	actualizarCamposMoneda();
@@ -1631,7 +1739,6 @@ tasasForm.addEventListener("submit", async (evento) => {
 		userId: usuarioActual.uid,
 		updatedAt: serverTimestamp()
 	};
-	console.log("Intentando guardar:", payload);
 	try {
 		await setDoc(doc(db, "tasas_caja", fecha), payload, { merge: true });
 		mostrarEstadoTasas(`Tasas guardadas en Firestore para ${formatearFecha(fecha)}.`, false);
@@ -1700,6 +1807,7 @@ function esAdministradora() {
 function seleccionarPestana(pestana) {
 	const lista = [
 		[tabCaja, panelCaja, "caja"],
+		[tabInventario, panelInventario, "inventario"],
 		[tabEstadisticas, panelEstadisticas, "estadisticas"],
 		[tabAgenda, panelAgenda, "agenda"],
 		[tabClub, panelClub, "club"]
@@ -1715,18 +1823,22 @@ function seleccionarPestana(pestana) {
 		}
 	}
 	if (pestana === "estadisticas") {
-		// Asegurar que las dimensiones de los canvas de Chart.js se recalculen al mostrar el panel
 		actualizarGraficas();
+	}
+	if (pestana === "inventario" && !inventarioIdInput.value && !codigoInventarioEditadoManualmente) {
+		inventarioCodigoInput.value = generarCodigoInventario(inventarioTipoSelect.value);
 	}
 }
 
 const pestanasAdmin = [
 	[tabCaja, "caja"],
+	[tabInventario, "inventario"],
 	[tabEstadisticas, "estadisticas"],
 	[tabAgenda, "agenda"],
 	[tabClub, "club"]
 ];
 for (const [tab, nombre] of pestanasAdmin) {
+	if (!tab) continue;
 	tab.addEventListener("click", () => seleccionarPestana(nombre));
 	tab.addEventListener("keydown", (evento) => {
 		if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(evento.key)) return;
@@ -1740,6 +1852,413 @@ for (const [tab, nombre] of pestanasAdmin) {
 		const [siguiente, siguienteNombre] = pestanasAdmin[siguienteIndice];
 		seleccionarPestana(siguienteNombre);
 		siguiente.focus();
+	});
+}
+
+/* =========================================================
+   Módulo de Inventario Odoo / Profit
+   ========================================================= */
+function seleccionarSubpestanaInventario(vista) {
+	const esRegistro = vista === "registro";
+	if (subtabInventarioRegistro) {
+		subtabInventarioRegistro.classList.toggle("es-activa", esRegistro);
+		subtabInventarioRegistro.setAttribute("aria-selected", String(esRegistro));
+	}
+	if (subtabInventarioStock) {
+		subtabInventarioStock.classList.toggle("es-activa", !esRegistro);
+		subtabInventarioStock.setAttribute("aria-selected", String(!esRegistro));
+	}
+	if (subpanelInventarioRegistro) subpanelInventarioRegistro.hidden = !esRegistro;
+	if (subpanelInventarioStock) subpanelInventarioStock.hidden = esRegistro;
+}
+
+if (subtabInventarioRegistro) {
+	subtabInventarioRegistro.addEventListener("click", () => seleccionarSubpestanaInventario("registro"));
+}
+if (subtabInventarioStock) {
+	subtabInventarioStock.addEventListener("click", () => seleccionarSubpestanaInventario("stock"));
+}
+
+function mostrarMensajeInventario(texto, esError = false) {
+	if (!inventarioMensaje) return;
+	inventarioMensaje.textContent = texto;
+	inventarioMensaje.classList.toggle("es-error", Boolean(esError));
+}
+
+function generarCodigoInventario(tipo = "Insumo") {
+	const prefijo = PREFIJOS_INVENTARIO[tipo] || "INS";
+	const codigosExistentes = new Set(
+		inventario.map((item) => String(item.codigo || "").trim().toUpperCase())
+	);
+	let mayorCorrelativo = 0;
+	const patron = new RegExp(`^${prefijo}-(\\d+)$`, "i");
+	for (const item of inventario) {
+		const coincidencia = String(item.codigo || "").trim().match(patron);
+		if (coincidencia) {
+			const num = Number.parseInt(coincidencia[1], 10);
+			if (Number.isFinite(num) && num > mayorCorrelativo) mayorCorrelativo = num;
+		}
+	}
+	let siguiente = mayorCorrelativo + 1;
+	let candidato = `${prefijo}-${String(siguiente).padStart(3, "0")}`;
+	while (codigosExistentes.has(candidato)) {
+		siguiente += 1;
+		candidato = `${prefijo}-${String(siguiente).padStart(3, "0")}`;
+	}
+	return candidato;
+}
+
+function limpiarFormularioInventario(conservarMensaje = false) {
+	if (!formInventario) return;
+	formInventario.reset();
+	inventarioIdInput.value = "";
+	inventarioTipoSelect.value = "Líquido";
+	inventarioCategoriaSelect.value = "Preparación y Uñas";
+	inventarioAplicacionSelect.value = "Nivelación";
+	inventarioCantidadInput.value = "1";
+	inventarioStockMinimoInput.value = "2";
+	codigoInventarioEditadoManualmente = false;
+	inventarioCodigoInput.value = generarCodigoInventario(inventarioTipoSelect.value);
+	inventarioFormTitulo.textContent = "Registrar o actualizar insumo";
+	btnGuardarInventario.textContent = "Guardar insumo";
+	btnLimpiarInventario.hidden = true;
+	inventarioSugerencias.replaceChildren();
+	inventarioSugerencias.hidden = true;
+	if (!conservarMensaje) mostrarMensajeInventario("", false);
+}
+
+function cargarInsumoEnFormulario(item) {
+	if (!item) return;
+	seleccionarSubpestanaInventario("registro");
+	inventarioIdInput.value = item.id;
+	inventarioNombreInput.value = item.nombre;
+	inventarioTipoSelect.value = PREFIJOS_INVENTARIO[item.tipo] ? item.tipo : "Insumo";
+	inventarioCategoriaSelect.value = item.categoria || "Preparación y Uñas";
+	inventarioAplicacionSelect.value = item.aplicacion || "Uso general";
+	inventarioMarcaInput.value = item.marca || "";
+	inventarioCodigoInput.value = item.codigo || generarCodigoInventario(inventarioTipoSelect.value);
+	codigoInventarioEditadoManualmente = true;
+	inventarioCantidadInput.value = String(item.cantidad ?? 0);
+	inventarioStockMinimoInput.value = String(item.stockMinimo ?? 2);
+	inventarioFormTitulo.textContent = `Editando: ${item.nombre}`;
+	btnGuardarInventario.textContent = "Actualizar insumo";
+	btnLimpiarInventario.hidden = false;
+	inventarioSugerencias.replaceChildren();
+	inventarioSugerencias.hidden = true;
+	mostrarMensajeInventario(`Producto "${item.nombre}" cargado. Modifica la cantidad o los datos y guarda.`, false);
+	inventarioNombreInput.focus();
+}
+
+function actualizarSugerenciasInventario() {
+	if (!inventarioNombreInput || !inventarioSugerencias) return;
+	const termino = inventarioNombreInput.value.trim().toLocaleLowerCase("es");
+	if (termino.length < 2) {
+		inventarioSugerencias.replaceChildren();
+		inventarioSugerencias.hidden = true;
+		return;
+	}
+	const coincidencias = inventario
+		.filter((item) =>
+			item.nombre.toLocaleLowerCase("es").includes(termino) ||
+			item.codigo.toLocaleLowerCase("es").includes(termino) ||
+			item.marca.toLocaleLowerCase("es").includes(termino)
+		)
+		.slice(0, 8);
+	inventarioSugerencias.replaceChildren();
+	for (const item of coincidencias) {
+		const boton = document.createElement("button");
+		boton.type = "button";
+		boton.className = "club-sugerencia";
+		boton.setAttribute("role", "option");
+		const titulo = document.createElement("strong");
+		titulo.textContent = `${item.nombre} (${item.codigo})`;
+		const detalle = document.createElement("small");
+		detalle.textContent = `${item.marca || "Sin marca"} · ${item.tipo} · Stock actual: ${item.cantidad}`;
+		boton.append(titulo, detalle);
+		boton.addEventListener("mousedown", (evento) => evento.preventDefault());
+		boton.addEventListener("click", () => cargarInsumoEnFormulario(item));
+		inventarioSugerencias.append(boton);
+	}
+	inventarioSugerencias.hidden = coincidencias.length === 0;
+}
+
+function renderizarInventario() {
+	if (!inventarioListaTbody || !inventarioVacio) return;
+	const termino = (buscarStockInput?.value || "").trim().toLocaleLowerCase("es");
+	const tipoFiltro = filtroInventarioTipo?.value || "todos";
+	const categoriaFiltro = filtroInventarioCategoria?.value || "todas";
+	const stockFiltro = filtroInventarioStockBajo?.value || "todos";
+
+	const filtrados = inventario
+		.filter((item) => {
+			const coincideTexto = !termino ||
+				item.nombre.toLocaleLowerCase("es").includes(termino) ||
+				item.codigo.toLocaleLowerCase("es").includes(termino) ||
+				item.marca.toLocaleLowerCase("es").includes(termino);
+			const coincideTipo = tipoFiltro === "todos" || item.tipo === tipoFiltro;
+			const coincideCategoria = categoriaFiltro === "todas" || item.categoria === categoriaFiltro;
+			const esBajo = item.cantidad <= item.stockMinimo;
+			const coincideStock = stockFiltro === "todos" || (stockFiltro === "bajo" && esBajo);
+			return coincideTexto && coincideTipo && coincideCategoria && coincideStock;
+		})
+		.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+
+	inventarioListaTbody.replaceChildren();
+	inventarioVacio.hidden = filtrados.length > 0;
+	inventarioVacio.textContent = inventario.length && !filtrados.length
+		? "No hay insumos que coincidan con los filtros aplicados."
+		: "No hay insumos registrados en el inventario.";
+
+	for (const item of filtrados) {
+		const fila = document.createElement("tr");
+		const esBajo = item.cantidad <= item.stockMinimo;
+
+		const celdaCodigo = document.createElement("td");
+		const badgeCodigo = document.createElement("span");
+		badgeCodigo.className = "inventario-codigo-badge";
+		badgeCodigo.textContent = item.codigo || "—";
+		celdaCodigo.append(badgeCodigo);
+
+		const celdaNombre = document.createElement("td");
+		celdaNombre.textContent = item.nombre;
+		if (item.categoria) {
+			const subCat = document.createElement("small");
+			subCat.style.display = "block";
+			subCat.style.color = "var(--texto-suave)";
+			subCat.style.fontSize = "0.76rem";
+			subCat.textContent = item.categoria;
+			celdaNombre.append(subCat);
+		}
+
+		const celdaMarca = crearCelda(item.marca || "Genérica");
+
+		const celdaTipo = document.createElement("td");
+		const tagTipo = document.createElement("span");
+		tagTipo.className = "inventario-tipo-tag";
+		tagTipo.textContent = item.tipo || "Insumo";
+		celdaTipo.append(tagTipo);
+
+		const celdaAplicacion = crearCelda(item.aplicacion || "Uso general");
+
+		const celdaCantidad = document.createElement("td");
+		celdaCantidad.style.textAlign = "center";
+		const controles = document.createElement("div");
+		controles.className = "inventario-stock-controles";
+
+		const btnRestar = document.createElement("button");
+		btnRestar.type = "button";
+		btnRestar.className = "inventario-btn-stock";
+		btnRestar.textContent = "−";
+		btnRestar.title = "Descontar 1 unidad";
+		btnRestar.setAttribute("aria-label", `Restar 1 a ${item.nombre}`);
+		btnRestar.disabled = item.cantidad <= 0;
+		btnRestar.addEventListener("click", () => ajustarStockInventario(item, -1));
+
+		const valorStock = document.createElement("span");
+		valorStock.className = `inventario-stock-valor${esBajo ? " es-bajo" : ""}`;
+		valorStock.textContent = String(item.cantidad);
+		if (esBajo) {
+			valorStock.title = `Stock bajo (mínimo recomendado: ${item.stockMinimo})`;
+		}
+
+		const btnSumar = document.createElement("button");
+		btnSumar.type = "button";
+		btnSumar.className = "inventario-btn-stock";
+		btnSumar.textContent = "+";
+		btnSumar.title = "Sumar 1 unidad";
+		btnSumar.setAttribute("aria-label", `Sumar 1 a ${item.nombre}`);
+		btnSumar.addEventListener("click", () => ajustarStockInventario(item, 1));
+
+		controles.append(btnRestar, valorStock, btnSumar);
+		celdaCantidad.append(controles);
+
+		if (esBajo) {
+			const aviso = document.createElement("small");
+			aviso.style.display = "block";
+			aviso.style.color = "#b3261e";
+			aviso.style.fontSize = "0.74rem";
+			aviso.style.fontWeight = "600";
+			aviso.textContent = item.cantidad === 0 ? "Agotado" : `⚠️ Mín: ${item.stockMinimo}`;
+			celdaCantidad.append(aviso);
+		}
+
+		const celdaAcciones = document.createElement("td");
+		const btnEditar = document.createElement("button");
+		btnEditar.type = "button";
+		btnEditar.className = "caja-editar";
+		btnEditar.textContent = "Editar";
+		btnEditar.addEventListener("click", () => cargarInsumoEnFormulario(item));
+
+		const btnEliminar = document.createElement("button");
+		btnEliminar.type = "button";
+		btnEliminar.className = "caja-eliminar";
+		btnEliminar.textContent = "Eliminar";
+		btnEliminar.addEventListener("click", () => eliminarInsumoInventario(item));
+
+		celdaAcciones.append(btnEditar, btnEliminar);
+		fila.append(celdaCodigo, celdaNombre, celdaMarca, celdaTipo, celdaAplicacion, celdaCantidad, celdaAcciones);
+		inventarioListaTbody.append(fila);
+	}
+}
+
+async function ajustarStockInventario(item, delta) {
+	if (!esAdministradora()) return;
+	if (delta < 0 && item.cantidad <= 0) return;
+	try {
+		await updateDoc(doc(db, "inventario", item.id), {
+			cantidad: increment(delta),
+			updatedAt: serverTimestamp()
+		});
+	} catch (error) {
+		console.error("No se pudo ajustar el stock del producto.", error);
+		mostrarMensajeInventario("No se pudo actualizar la cantidad en Firestore.", true);
+	}
+}
+
+async function eliminarInsumoInventario(item) {
+	if (!esAdministradora()) return;
+	if (!window.confirm(`¿Eliminar "${item.nombre}" (${item.codigo}) del inventario?`)) return;
+	try {
+		await deleteDoc(doc(db, "inventario", item.id));
+		if (inventarioIdInput.value === item.id) {
+			limpiarFormularioInventario(true);
+		}
+		mostrarMensajeInventario("Insumo eliminado del inventario.", false);
+	} catch (error) {
+		console.error("No se pudo eliminar el insumo.", error);
+		mostrarMensajeInventario("No se pudo eliminar el insumo. Revisa tu conexión.", true);
+	}
+}
+
+function escucharInventario(usuario) {
+	if (cancelarInventario) cancelarInventario();
+	inventario = [];
+	renderizarInventario();
+	cancelarInventario = onSnapshot(inventarioRef, (snapshot) => {
+		if (!usuarioActual || usuarioActual.uid !== usuario.uid) return;
+		inventario = snapshot.docs.map((documento) => {
+			const datos = documento.data();
+			return {
+				id: documento.id,
+				nombre: typeof datos.nombre === "string" ? datos.nombre.trim() : "Sin nombre",
+				tipo: typeof datos.tipo === "string" ? datos.tipo : "Insumo",
+				categoria: typeof datos.categoria === "string" ? datos.categoria : "Preparación y Uñas",
+				aplicacion: typeof datos.aplicacion === "string" ? datos.aplicacion : "Uso general",
+				marca: typeof datos.marca === "string" ? datos.marca.trim() : "Genérica",
+				codigo: typeof datos.codigo === "string" ? datos.codigo.trim().toUpperCase() : "",
+				cantidad: Math.max(0, Math.floor(Number(datos.cantidad) || 0)),
+				stockMinimo: Math.max(0, Math.floor(Number(datos.stockMinimo) || 0))
+			};
+		});
+		if (!inventarioIdInput.value && !codigoInventarioEditadoManualmente && inventarioCodigoInput) {
+			inventarioCodigoInput.value = generarCodigoInventario(inventarioTipoSelect.value);
+		}
+		renderizarInventario();
+	}, (error) => {
+		console.error("No se pudo escuchar la colección inventario.", error);
+		mostrarMensajeInventario("No se pudo cargar el inventario. Revisa las reglas de Firestore.", true);
+	});
+}
+
+if (inventarioTipoSelect) {
+	inventarioTipoSelect.addEventListener("change", () => {
+		if (!codigoInventarioEditadoManualmente) {
+			inventarioCodigoInput.value = generarCodigoInventario(inventarioTipoSelect.value);
+		}
+	});
+}
+if (inventarioCodigoInput) {
+	inventarioCodigoInput.addEventListener("input", () => {
+		codigoInventarioEditadoManualmente = true;
+	});
+}
+if (btnRegenerarCodigo) {
+	btnRegenerarCodigo.addEventListener("click", () => {
+		codigoInventarioEditadoManualmente = false;
+		inventarioCodigoInput.value = generarCodigoInventario(inventarioTipoSelect.value);
+	});
+}
+if (btnLimpiarInventario) {
+	btnLimpiarInventario.addEventListener("click", () => limpiarFormularioInventario(false));
+}
+if (inventarioNombreInput) {
+	inventarioNombreInput.addEventListener("input", actualizarSugerenciasInventario);
+	inventarioNombreInput.addEventListener("focus", actualizarSugerenciasInventario);
+	inventarioNombreInput.addEventListener("blur", () => {
+		window.setTimeout(() => {
+			if (!inventarioSugerencias.matches(":hover")) inventarioSugerencias.hidden = true;
+		}, 150);
+	});
+}
+for (const controlFiltro of [buscarStockInput, filtroInventarioTipo, filtroInventarioCategoria, filtroInventarioStockBajo]) {
+	if (!controlFiltro) continue;
+	controlFiltro.addEventListener("input", renderizarInventario);
+	controlFiltro.addEventListener("change", renderizarInventario);
+}
+
+if (formInventario) {
+	formInventario.addEventListener("submit", async (evento) => {
+		evento.preventDefault();
+		if (!esAdministradora() || guardandoInventario) return;
+		if (!formInventario.reportValidity()) {
+			mostrarMensajeInventario("Completa todos los campos obligatorios del insumo.", true);
+			return;
+		}
+		const idEdicion = inventarioIdInput.value.trim();
+		const nombre = inventarioNombreInput.value.trim();
+		const tipo = inventarioTipoSelect.value;
+		const categoria = inventarioCategoriaSelect.value;
+		const aplicacion = inventarioAplicacionSelect.value;
+		const marca = inventarioMarcaInput.value.trim() || "Genérica / Sin marca";
+		const codigo = (inventarioCodigoInput.value.trim() || generarCodigoInventario(tipo)).toUpperCase();
+		const cantidad = Math.max(0, Math.floor(Number(inventarioCantidadInput.value) || 0));
+		const stockMinimo = Math.max(0, Math.floor(Number(inventarioStockMinimoInput.value) || 0));
+
+		if (!nombre || !codigo) {
+			mostrarMensajeInventario("El nombre y el código del producto son obligatorios.", true);
+			return;
+		}
+		const duplicadoCodigo = inventario.find((item) => item.codigo === codigo && item.id !== idEdicion);
+		if (duplicadoCodigo) {
+			mostrarMensajeInventario(`El código ${codigo} ya pertenece a "${duplicadoCodigo.nombre}". Pulsa "Auto" para generar uno nuevo.`, true);
+			return;
+		}
+
+		guardandoInventario = true;
+		btnGuardarInventario.disabled = true;
+		try {
+			const payload = {
+				nombre,
+				tipo,
+				categoria,
+				aplicacion,
+				marca,
+				codigo,
+				cantidad,
+				stockMinimo,
+				updatedAt: serverTimestamp()
+			};
+			if (idEdicion) {
+				await updateDoc(doc(db, "inventario", idEdicion), payload);
+				limpiarFormularioInventario(true);
+				mostrarMensajeInventario(`✅ Insumo "${nombre}" (${codigo}) actualizado correctamente.`, false);
+			} else {
+				await addDoc(inventarioRef, {
+					...payload,
+					userId: usuarioActual.uid,
+					createdAt: serverTimestamp()
+				});
+				limpiarFormularioInventario(true);
+				mostrarMensajeInventario(`✅ Insumo "${nombre}" registrado con código ${codigo}.`, false);
+			}
+		} catch (error) {
+			console.error("No se pudo guardar el insumo en Firestore.", error);
+			const code = error?.code || "sin código";
+			mostrarMensajeInventario(`Error al guardar el insumo (${code}). Revisa tu conexión y permisos.`, true);
+		} finally {
+			guardandoInventario = false;
+			btnGuardarInventario.disabled = false;
+		}
 	});
 }
 
@@ -2145,6 +2664,7 @@ async function registrarAbonoClienta(clienta, valor, metodo, registrarEnCaja) {
 			concepto: `Abono de deuda — ${clienta.nombre}`,
 			categoria: "Abono de deuda",
 			categoriaGasto: "",
+			categoriasGasto: [],
 			metodo,
 			montoUsd: abono,
 			equivalenteUsd: abono,
@@ -2161,7 +2681,6 @@ async function registrarAbonoClienta(clienta, valor, metodo, registrarEnCaja) {
 			clientaDocId: clienta.docId,
 			createdAt: serverTimestamp()
 		};
-		console.log("Intentando guardar:", payload);
 		batch.set(movimientoRef, payload);
 	}
 	try {
@@ -3018,7 +3537,7 @@ clubAdminForm.addEventListener("submit", async (evento) => {
 					if (existente.exists()) throw new Error("El PIN ya existe.");
 					let invitadora = { nombre: "", bonoActivo: false, referidosCiclo: 0 };
 					if (referidora) {
-						const actualReferidora = await transaccion.get(referidora.ref);
+						const actualReferidora = await transaccion.get(referidora);
 						if (!actualReferidora.exists() ||
 							normalizarTelefonoVE(actualReferidora.data().telefonoNormalizado || actualReferidora.data().telefono) !== telefonoReferidora) {
 							throw new Error("La tarjeta de quien invita ya no está disponible.");
@@ -3029,7 +3548,7 @@ clubAdminForm.addEventListener("submit", async (evento) => {
 							: 0;
 						const referidosActualizados = Math.min(2, referidosCiclo + 1);
 						if (referidosCiclo < 2) {
-							transaccion.update(referidora.ref, {
+							transaccion.update(referidora, {
 								referidosCiclo: referidosActualizados,
 								actualizadoEn: serverTimestamp()
 							});
@@ -3367,7 +3886,10 @@ async function cambiarPinClub() {
 			referidaPor: typeof resultado.referidaPor === "string" ? resultado.referidaPor : "",
 			sellos: Number(resultado.sellos ?? 0),
 			ultimaVisita: resultado.ultimaVisita ?? null,
-			premioDisponible: resultado.premioDisponible === true
+			premioDisponible: resultado.premioDisponible === true,
+			saldoPendienteUsd: clientaClubActual.saldoPendienteUsd || 0,
+			detalleDeuda: clientaClubActual.detalleDeuda || "",
+			fechaDeuda: clientaClubActual.fechaDeuda || ""
 		};
 		clubNuevoPinInput.value = "";
 		clubCambioPinForm.hidden = true;
@@ -3447,6 +3969,10 @@ onAuthStateChanged(auth, (user) => {
 		cancelarMovimientos();
 		cancelarMovimientos = null;
 	}
+	if (cancelarInventario) {
+		cancelarInventario();
+		cancelarInventario = null;
+	}
 	if (cancelarCitas) {
 		cancelarCitas();
 		cancelarCitas = null;
@@ -3479,6 +4005,8 @@ onAuthStateChanged(auth, (user) => {
 	usuarioActual = user;
 	if (!user) {
 		movimientos = [];
+		inventario = [];
+		renderizarInventario();
 		clientas = [];
 		renderizarClientasDeuda();
 		citasAgenda = [];
@@ -3512,6 +4040,7 @@ onAuthStateChanged(auth, (user) => {
 	app.removeAttribute("inert");
 	void cargarTasasFirestore(user, form.elements.fecha.value);
 	escucharMovimientos(user);
+	escucharInventario(user);
 	escucharCitas(user);
 	escucharFidelidad(user);
 	cargarConfiguracionAgenda();

@@ -17,7 +17,7 @@
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 	<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-	<script type="module" src="admin.js?v=maynails-admin-v8"></script>
+	<script type="module" src="admin.js?v=maynails-admin-v9"></script>
 </head>
 <body>
 	<header>
@@ -35,11 +35,12 @@
 			<div class="pagina-titulo caja-titulo">
 				<span class="tag">Administración interna</span>
 				<h1>Centro de administración</h1>
-				<p>Gestiona la caja, estadísticas y el Club MayNails en un solo lugar.</p>
+				<p>Gestiona la caja, inventario, estadísticas y el Club MayNails en un solo lugar.</p>
 			</div>
 
 			<nav class="admin-pestanas" aria-label="Secciones de administración" role="tablist">
 				<button id="tab-caja" class="admin-pestana" type="button" role="tab" aria-selected="true" aria-controls="panel-caja">Caja y Contabilidad</button>
+				<button id="tab-inventario" class="admin-pestana" type="button" role="tab" aria-selected="false" aria-controls="panel-inventario" tabindex="-1">Inventario</button>
 				<button id="tab-estadisticas" class="admin-pestana" type="button" role="tab" aria-selected="false" aria-controls="panel-estadisticas" tabindex="-1">Estadísticas</button>
 				<button id="tab-agenda" class="admin-pestana" type="button" role="tab" aria-selected="false" aria-controls="panel-agenda" tabindex="-1">Agenda / Citas</button>
 				<button id="tab-club" class="admin-pestana" type="button" role="tab" aria-selected="false" aria-controls="panel-club" tabindex="-1">Gestión Club MayNails</button>
@@ -101,11 +102,13 @@
 				<div class="caja-metodos caja-egresos-categorias" aria-label="Gastos por categoría">
 					<h3>Gastos por categoría</h3>
 					<div class="caja-metodos-grid">
-						<div><span>Limpieza</span><strong id="gasto-limpieza">$0.00</strong></div>
-						<div><span>Café / Atención al cliente</span><strong id="gasto-cafe">$0.00</strong></div>
+						<div><span>Renta del local</span><strong id="gasto-renta">$0.00</strong></div>
+						<div><span>Internet</span><strong id="gasto-internet">$0.00</strong></div>
+						<div><span>Servicios (Luz/Agua/Aseo)</span><strong id="gasto-servicios">$0.00</strong></div>
 						<div><span>Materiales e insumos</span><strong id="gasto-materiales">$0.00</strong></div>
 						<div><span>Herramientas y equipos</span><strong id="gasto-herramientas">$0.00</strong></div>
-						<div><span>Otros gastos</span><strong id="gasto-otros">$0.00</strong></div>
+						<div><span>Transporte / Delivery</span><strong id="gasto-transporte">$0.00</strong></div>
+						<div><span>Otros</span><strong id="gasto-otros">$0.00</strong></div>
 					</div>
 				</div>
 			</section>
@@ -126,17 +129,24 @@
 					<label>Servicio / concepto
 						<input name="concepto" type="text" maxlength="120" required>
 					</label>
-					<label>Categoría / Servicio
+					<label id="editar-categoria-servicio-campo">Categoría / Servicio
 						<select name="categoria" required>
 							<option value="Manicure">Manicure</option><option value="Nivelación">Nivelación</option><option value="Sistema Softgel">Sistema Softgel</option><option value="Sistema Acrílico">Sistema Acrílico</option><option value="Láser">Láser</option><option value="Retiro de Sistema">Retiro de Sistema</option><option value="Uña adicional">Uña adicional</option>
 							<option value="Manicura">Manicura</option><option value="Sistema Jelly">Sistema Jelly</option><option value="Sistema Dual">Sistema Dual</option><option value="Pedicure">Pedicure</option><option value="Quiropedia">Quiropedia</option><option value="Tratamiento Láser">Tratamiento Láser</option><option value="Insumos/Gastos">Insumos/Gastos</option>
 						</select>
 					</label>
-					<label id="editar-categoria-gasto-campo" hidden>Categoría de gasto
-						<select name="categoriaGasto">
-							<option value="">Selecciona una categoría</option><option value="Limpieza">Limpieza</option><option value="Café / Atención al cliente">Café / Atención al cliente</option><option value="Materiales e insumos">Materiales e insumos</option><option value="Herramientas y equipos">Herramientas y equipos</option><option value="Otros gastos">Otros gastos</option>
-						</select>
-					</label>
+					<div id="editar-categoria-gasto-campo" class="caja-categorias-gasto-contenedor" hidden>
+						<span class="caja-gasto-titulo">Categorías de gasto (marca con chulito una o varias)</span>
+						<div class="caja-gastos-checkboxes">
+							<label class="caja-gasto-check"><input type="checkbox" name="editarCategoriasGastoCheck" value="Renta del local"> Renta del local</label>
+							<label class="caja-gasto-check"><input type="checkbox" name="editarCategoriasGastoCheck" value="Internet"> Internet</label>
+							<label class="caja-gasto-check"><input type="checkbox" name="editarCategoriasGastoCheck" value="Servicios (Luz / Agua / Aseo)"> Servicios (Luz / Agua / Aseo)</label>
+							<label class="caja-gasto-check"><input type="checkbox" name="editarCategoriasGastoCheck" value="Materiales e insumos"> Materiales e insumos</label>
+							<label class="caja-gasto-check"><input type="checkbox" name="editarCategoriasGastoCheck" value="Herramientas y equipos"> Herramientas y equipos</label>
+							<label class="caja-gasto-check"><input type="checkbox" name="editarCategoriasGastoCheck" value="Transporte / Delivery"> Transporte / Delivery</label>
+							<label class="caja-gasto-check"><input type="checkbox" name="editarCategoriasGastoCheck" value="Otros"> Otros</label>
+						</div>
+					</div>
 					<label>Método de pago
 						<select name="metodo" required><option value="Pago Móvil">Pago Móvil</option><option value="Binance Pay">Binance Pay</option><option value="Efectivo Bs">Efectivo Bs</option><option value="Efectivo">Efectivo (USD)</option><option value="Efectivo Euro">Efectivo (Euro)</option><option value="Efectivo USDT">Efectivo (USDT)</option></select>
 					</label>
@@ -171,7 +181,7 @@
 					<label>Concepto / Clienta
 						<input name="concepto" type="text" maxlength="120" placeholder="Ej. Manicura — Ana" required>
 					</label>
-					<label>Categoría / Servicio
+					<label id="categoria-servicio-campo">Categoría / Servicio
 						<select name="categoria" required>
 							<option value="Manicure">Manicure</option>
 							<option value="Nivelación">Nivelación</option>
@@ -189,16 +199,18 @@
 							<option value="Insumos/Gastos">Insumos/Gastos</option>
 						</select>
 					</label>
-					<label id="categoria-gasto-campo" hidden>Categoría de gasto
-						<select name="categoriaGasto">
-							<option value="">Selecciona una categoría</option>
-							<option value="Limpieza">Limpieza</option>
-							<option value="Café / Atención al cliente">Café / Atención al cliente</option>
-							<option value="Materiales e insumos">Materiales e insumos</option>
-							<option value="Herramientas y equipos">Herramientas y equipos</option>
-							<option value="Otros gastos">Otros gastos</option>
-						</select>
-					</label>
+					<div id="categoria-gasto-campo" class="caja-categorias-gasto-contenedor" hidden>
+						<span class="caja-gasto-titulo">Categorías de gasto (marca con chulito una o varias)</span>
+						<div class="caja-gastos-checkboxes">
+							<label class="caja-gasto-check"><input type="checkbox" name="categoriasGastoCheck" value="Renta del local"> Renta del local</label>
+							<label class="caja-gasto-check"><input type="checkbox" name="categoriasGastoCheck" value="Internet"> Internet</label>
+							<label class="caja-gasto-check"><input type="checkbox" name="categoriasGastoCheck" value="Servicios (Luz / Agua / Aseo)"> Servicios (Luz / Agua / Aseo)</label>
+							<label class="caja-gasto-check"><input type="checkbox" name="categoriasGastoCheck" value="Materiales e insumos"> Materiales e insumos</label>
+							<label class="caja-gasto-check"><input type="checkbox" name="categoriasGastoCheck" value="Herramientas y equipos"> Herramientas y equipos</label>
+							<label class="caja-gasto-check"><input type="checkbox" name="categoriasGastoCheck" value="Transporte / Delivery"> Transporte / Delivery</label>
+							<label class="caja-gasto-check"><input type="checkbox" name="categoriasGastoCheck" value="Otros"> Otros</label>
+						</div>
+					</div>
 					<label>Método de pago
 						<select name="metodo" required>
 							<option value="Pago Móvil">Pago Móvil</option>
@@ -264,6 +276,167 @@
 				<p id="caja-mensaje" class="caja-mensaje" role="status" aria-live="polite"></p>
 			</section>
 			</div>
+
+			<section id="panel-inventario" class="admin-tab-panel" role="tabpanel" aria-labelledby="tab-inventario" hidden>
+				<div class="caja-panel-cabecera inventario-cabecera">
+					<div>
+						<span class="tag">Control de existencias</span>
+						<h2>Inventario de insumos</h2>
+					</div>
+					<div class="inventario-subpestanas" role="tablist" aria-label="Vistas de inventario">
+						<button id="subtab-inventario-registro" class="inventario-subpestana es-activa" type="button" role="tab" aria-selected="true" aria-controls="subpanel-inventario-registro">Cargar / Registrar Insumo</button>
+						<button id="subtab-inventario-stock" class="inventario-subpestana" type="button" role="tab" aria-selected="false" aria-controls="subpanel-inventario-stock">Ver Stock y Cantidades</button>
+					</div>
+				</div>
+
+				<!-- Sub-vista 1: Cargar / Registrar Insumo -->
+				<section id="subpanel-inventario-registro" class="caja-panel inventario-subpanel" role="tabpanel" aria-labelledby="subtab-inventario-registro">
+					<div class="inventario-panel-intro">
+						<span class="tag">Ficha de insumo</span>
+						<h3 id="inventario-form-titulo">Registrar o actualizar insumo</h3>
+						<p>Autocompleta el nombre para buscar productos ya registrados o asigna código automático.</p>
+					</div>
+					<form id="form-inventario" class="caja-formulario inventario-formulario" novalidate>
+						<input id="inventario-id" name="id" type="hidden">
+						
+						<div class="inventario-campo-autocomplete">
+							<label for="inventario-nombre">Nombre del producto
+								<input id="inventario-nombre" name="nombre" type="text" maxlength="120" placeholder="Ej. Primer sin ácido, Gel Rubber, Base Coat..." required autocomplete="off">
+							</label>
+							<div id="inventario-nombre-sugerencias" class="club-sugerencias inventario-sugerencias" role="listbox" hidden></div>
+						</div>
+
+						<label for="inventario-tipo">Tipo / Formato
+							<select id="inventario-tipo" name="tipo" required>
+								<option value="Líquido">Líquido</option>
+								<option value="Polvo">Polvo</option>
+								<option value="Gel">Gel</option>
+								<option value="Insumo">Insumo</option>
+								<option value="Herramienta">Herramienta</option>
+							</select>
+						</label>
+
+						<label for="inventario-categoria">Categoría
+							<select id="inventario-categoria" name="categoria" required>
+								<option value="Preparación y Uñas">Preparación y Uñas</option>
+								<option value="Sistemas y Construcción">Sistemas y Construcción</option>
+								<option value="Cuidado de Pies/Manos">Cuidado de Pies/Manos</option>
+								<option value="Limpieza y Bioseguridad">Limpieza y Bioseguridad</option>
+								<option value="Operación del Estudio">Operación del Estudio</option>
+							</select>
+						</label>
+
+						<label for="inventario-aplicacion">Para qué lo usa / Aplicación
+							<select id="inventario-aplicacion" name="aplicacion" required>
+								<option value="Nivelación">Nivelación</option>
+								<option value="Softgel/Dual">Softgel/Dual</option>
+								<option value="Acrílico">Acrílico</option>
+								<option value="Manicura/Pedicure">Manicura/Pedicure</option>
+								<option value="Retiro/Limpieza">Retiro/Limpieza</option>
+								<option value="Uso general">Uso general</option>
+							</select>
+						</label>
+
+						<label for="inventario-marca">Marca
+							<input id="inventario-marca" name="marca" type="text" list="inventario-marcas-list" placeholder="Ej. Mia Secret, Cherimoya o Genérica" required>
+							<datalist id="inventario-marcas-list">
+								<option value="Genérica / Sin marca">
+								<option value="Mia Secret">
+								<option value="Cherimoya">
+								<option value="Kupa">
+								<option value="Gelish">
+								<option value="OPI">
+								<option value="Masglo">
+								<option value="Victoria Vynn">
+								<option value="Organic Nails">
+							</datalist>
+						</label>
+
+						<label for="inventario-codigo">Código automático
+							<div class="inventario-codigo-wrap">
+								<input id="inventario-codigo" name="codigo" type="text" placeholder="Ej. LIQ-001" required>
+								<button type="button" id="btn-regenerar-codigo" class="caja-historial-toggle inventario-btn-auto" title="Regenerar código automático">🔄 Auto</button>
+							</div>
+						</label>
+
+						<label for="inventario-cantidad">Cantidad inicial / actual
+							<input id="inventario-cantidad" name="cantidad" type="number" min="0" step="1" value="1" required>
+						</label>
+
+						<label for="inventario-stock-minimo">Stock mínimo recomendado
+							<input id="inventario-stock-minimo" name="stockMinimo" type="number" min="0" step="1" value="2">
+						</label>
+
+						<div class="caja-formulario-acciones inventario-acciones">
+							<button id="btn-guardar-inventario" class="boton caja-submit" type="submit">Guardar insumo</button>
+							<button id="btn-limpiar-inventario" class="caja-eliminar" type="button" hidden>Limpiar / Nuevo producto</button>
+						</div>
+					</form>
+					<p id="inventario-mensaje" class="caja-mensaje" role="status" aria-live="polite"></p>
+				</section>
+
+				<!-- Sub-vista 2: Ver Stock y Cantidades -->
+				<section id="subpanel-inventario-stock" class="caja-panel inventario-subpanel" role="tabpanel" aria-labelledby="subtab-inventario-stock" hidden>
+					<div class="inventario-panel-intro">
+						<span class="tag">Existencias en tiempo real</span>
+						<h3>Listado y control de stock</h3>
+						<p>Consulta existencias, filtra por categoría y ajusta cantidades con un solo clic.</p>
+					</div>
+
+					<div class="inventario-filtros-bar">
+						<div class="inventario-busqueda">
+							<label for="buscar-stock" class="visually-hidden">Buscar insumo</label>
+							<input id="buscar-stock" type="search" placeholder="🔍 Buscar por nombre o código...">
+						</div>
+						<div class="inventario-select-filtros">
+							<label for="filtro-inventario-tipo">Tipo:
+								<select id="filtro-inventario-tipo">
+									<option value="todos">Todos los formatos</option>
+									<option value="Líquido">Líquido</option>
+									<option value="Polvo">Polvo</option>
+									<option value="Gel">Gel</option>
+									<option value="Insumo">Insumo</option>
+									<option value="Herramienta">Herramienta</option>
+								</select>
+							</label>
+							<label for="filtro-inventario-categoria">Categoría:
+								<select id="filtro-inventario-categoria">
+									<option value="todas">Todas las categorías</option>
+									<option value="Preparación y Uñas">Preparación y Uñas</option>
+									<option value="Sistemas y Construcción">Sistemas y Construcción</option>
+									<option value="Cuidado de Pies/Manos">Cuidado de Pies/Manos</option>
+									<option value="Limpieza y Bioseguridad">Limpieza y Bioseguridad</option>
+									<option value="Operación del Estudio">Operación del Estudio</option>
+								</select>
+							</label>
+							<label for="filtro-inventario-stock-bajo">
+								<select id="filtro-inventario-stock-bajo">
+									<option value="todos">Todo el stock</option>
+									<option value="bajo">⚠️ Stock bajo / agotándose</option>
+								</select>
+							</label>
+						</div>
+					</div>
+
+					<div class="caja-tabla-contenedor">
+						<table class="caja-tabla inventario-tabla">
+							<thead>
+								<tr>
+									<th>Código</th>
+									<th>Nombre</th>
+									<th>Marca</th>
+									<th>Tipo</th>
+									<th>Para qué se usa</th>
+									<th style="text-align: center;">Cantidad actual</th>
+									<th>Acciones</th>
+								</tr>
+							</thead>
+							<tbody id="inventario-lista-tbody"></tbody>
+						</table>
+						<p id="inventario-vacio" class="caja-vacio">No hay insumos registrados en el inventario.</p>
+					</div>
+				</section>
+			</section>
 
 			<section id="panel-estadisticas" class="admin-tab-panel" role="tabpanel" aria-labelledby="tab-estadisticas" hidden>
 				<!-- Bloque 1: KPIs Resumen Superior -->
