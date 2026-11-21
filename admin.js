@@ -107,9 +107,11 @@ let inicioSesionEnCurso = false;
 let tasasPorFecha = {};
 
 const panelCaja = document.getElementById("panel-caja");
+const panelEstadisticas = document.getElementById("panel-estadisticas");
 const panelClub = document.getElementById("panel-club");
 const panelAgenda = document.getElementById("panel-agenda");
 const tabCaja = document.getElementById("tab-caja");
+const tabEstadisticas = document.getElementById("tab-estadisticas");
 const tabClub = document.getElementById("tab-club");
 const tabAgenda = document.getElementById("tab-agenda");
 const agendaConfigForm = document.getElementById("agenda-config-form");
@@ -1214,7 +1216,8 @@ function editarMovimiento(id) {
 	if (guardandoEdicionMovimiento) return;
 	const movimiento = movimientos.find((item) => item.id === id);
 	if (!movimiento) return;
-	establecerHistorialAbierto(true);
+	// Al editar desde el módulo de Estadísticas, cambiar de pestaña a Caja y enfocar el formulario
+	seleccionarPestana("caja");
 	const tipoNormalizado = String(movimiento.tipo || "").trim().toLowerCase();
 	if (!["ingreso", "gasto"].includes(tipoNormalizado)) {
 		const texto = "No se puede editar: el tipo de movimiento guardado no es válido.";
@@ -1240,7 +1243,11 @@ function editarMovimiento(id) {
 	formularioEdicion.elements.tasaUsada.value = Number.isFinite(movimiento.tasaUsada) ? movimiento.tasaUsada : "";
 	mostrarCategoriaGasto(formularioEdicion, document.getElementById("editar-categoria-gasto-campo"), movimiento.categoriaGasto);
 	actualizarCamposEdicion();
-	formularioEdicion.scrollIntoView({ behavior: "smooth", block: "center" });
+	window.setTimeout(() => {
+		formularioEdicion.scrollIntoView({ behavior: "smooth", block: "center" });
+		const primerCampo = formularioEdicion.querySelector("input:not([type='hidden']), select");
+		if (primerCampo) primerCampo.focus();
+	}, 100);
 }
 
 function cancelarEdicion() {
@@ -1691,20 +1698,34 @@ function esAdministradora() {
 }
 
 function seleccionarPestana(pestana) {
-	const verCaja = pestana === "caja";
-	const verClub = pestana === "club";
-	tabCaja.setAttribute("aria-selected", String(verCaja));
-	tabClub.setAttribute("aria-selected", String(verClub));
-	tabAgenda.setAttribute("aria-selected", String(!verCaja && !verClub));
-	tabCaja.tabIndex = verCaja ? 0 : -1;
-	tabClub.tabIndex = verClub ? 0 : -1;
-	tabAgenda.tabIndex = !verCaja && !verClub ? 0 : -1;
-	panelCaja.hidden = !verCaja;
-	panelClub.hidden = !verClub;
-	panelAgenda.hidden = verCaja || verClub;
+	const lista = [
+		[tabCaja, panelCaja, "caja"],
+		[tabEstadisticas, panelEstadisticas, "estadisticas"],
+		[tabAgenda, panelAgenda, "agenda"],
+		[tabClub, panelClub, "club"]
+	];
+	for (const [tab, panel, nombre] of lista) {
+		const activo = nombre === pestana;
+		if (tab) {
+			tab.setAttribute("aria-selected", String(activo));
+			tab.tabIndex = activo ? 0 : -1;
+		}
+		if (panel) {
+			panel.hidden = !activo;
+		}
+	}
+	if (pestana === "estadisticas") {
+		// Asegurar que las dimensiones de los canvas de Chart.js se recalculen al mostrar el panel
+		actualizarGraficas();
+	}
 }
 
-const pestanasAdmin = [[tabCaja, "caja"], [tabClub, "club"], [tabAgenda, "agenda"]];
+const pestanasAdmin = [
+	[tabCaja, "caja"],
+	[tabEstadisticas, "estadisticas"],
+	[tabAgenda, "agenda"],
+	[tabClub, "club"]
+];
 for (const [tab, nombre] of pestanasAdmin) {
 	tab.addEventListener("click", () => seleccionarPestana(nombre));
 	tab.addEventListener("keydown", (evento) => {

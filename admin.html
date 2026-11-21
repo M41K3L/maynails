@@ -38,42 +38,11 @@
 				<p>Gestiona la caja, estadísticas y el Club MayNails en un solo lugar.</p>
 			</div>
 
-			<!-- Contadores rápidos ejecutivos visibles de entrada -->
-			<aside class="admin-contadores-rapidos" aria-label="Contadores rápidos de gestión">
-				<article class="admin-contador-card">
-					<span class="admin-contador-icono" aria-hidden="true">📅</span>
-					<div>
-						<span>Citas pendientes</span>
-						<strong id="rapido-citas-pendientes">0</strong>
-					</div>
-				</article>
-				<article class="admin-contador-card">
-					<span class="admin-contador-icono" aria-hidden="true">💳</span>
-					<div>
-						<span>Por cobrar (Fiado)</span>
-						<strong id="rapido-cuentas-cobrar">$0.00</strong>
-					</div>
-				</article>
-				<article class="admin-contador-card">
-					<span class="admin-contador-icono" aria-hidden="true">✨</span>
-					<div>
-						<span>Clientas registradas</span>
-						<strong id="rapido-total-clientas">0</strong>
-					</div>
-				</article>
-				<article class="admin-contador-card">
-					<span class="admin-contador-icono" aria-hidden="true">📊</span>
-					<div>
-						<span>Movimientos del día</span>
-						<strong id="rapido-movimientos-hoy">0</strong>
-					</div>
-				</article>
-			</aside>
-
 			<nav class="admin-pestanas" aria-label="Secciones de administración" role="tablist">
 				<button id="tab-caja" class="admin-pestana" type="button" role="tab" aria-selected="true" aria-controls="panel-caja">Caja y Contabilidad</button>
+				<button id="tab-estadisticas" class="admin-pestana" type="button" role="tab" aria-selected="false" aria-controls="panel-estadisticas" tabindex="-1">Estadísticas</button>
+				<button id="tab-agenda" class="admin-pestana" type="button" role="tab" aria-selected="false" aria-controls="panel-agenda" tabindex="-1">Agenda / Citas</button>
 				<button id="tab-club" class="admin-pestana" type="button" role="tab" aria-selected="false" aria-controls="panel-club" tabindex="-1">Gestión Club MayNails</button>
-				<button id="tab-agenda" class="admin-pestana" type="button" role="tab" aria-selected="false" aria-controls="panel-agenda" tabindex="-1">Agenda y estadísticas</button>
 			</nav>
 			<div id="panel-caja" class="admin-tab-panel" role="tabpanel" aria-labelledby="tab-caja">
 			<section class="caja-panel caja-tasas" aria-labelledby="tasas-titulo">
@@ -141,62 +110,57 @@
 				</div>
 			</section>
 
-			<!-- Gráficas Visuales con Datos Reales (Chart.js) -->
-			<section class="caja-panel caja-graficas-seccion" aria-labelledby="graficas-titulo">
-				<div class="caja-panel-cabecera caja-graficas-cabecera">
-					<div>
-						<span class="tag">Métricas visuales</span>
-						<h2 id="graficas-titulo">Gráficas y Rendimiento</h2>
-					</div>
-					<div class="caja-graficas-controles">
-						<label class="caja-graficas-label" for="graficas-periodo">Período:
-							<select id="graficas-periodo" class="caja-graficas-select">
-								<option value="mes" selected>Este mes</option>
-								<option value="historico">Histórico completo</option>
-							</select>
-						</label>
-						<button id="toggle-graficas" class="caja-historial-toggle" type="button" aria-expanded="true" aria-controls="graficas-contenido">Ocultar gráficas</button>
-					</div>
-				</div>
-				<div id="graficas-contenido" class="caja-graficas-contenido is-open">
-					<div class="caja-graficas-interior">
-						<div class="caja-graficas-grid">
-							<article class="caja-grafica-card">
-								<div class="caja-grafica-header">
-									<h3>Ingresos vs. Gastos (USD)</h3>
-									<span class="caja-grafica-sub" id="grafica-sub-balance">$0.00 neto</span>
-								</div>
-								<div class="caja-grafica-canvas-wrap">
-									<canvas id="chart-ingresos-gastos"></canvas>
-								</div>
-							</article>
-							<article class="caja-grafica-card">
-								<div class="caja-grafica-header">
-									<h3>Servicios más solicitados</h3>
-									<span class="caja-grafica-sub" id="grafica-sub-servicios">Top categorías</span>
-								</div>
-								<div class="caja-grafica-canvas-wrap">
-									<canvas id="chart-servicios"></canvas>
-								</div>
-							</article>
-							<article class="caja-grafica-card">
-								<div class="caja-grafica-header">
-									<h3>Métodos de pago</h3>
-									<span class="caja-grafica-sub" id="grafica-sub-metodos">Distribución</span>
-								</div>
-								<div class="caja-grafica-canvas-wrap">
-									<canvas id="chart-metodos-pago"></canvas>
-								</div>
-							</article>
-						</div>
-					</div>
-				</div>
-			</section>
-
 			<section class="caja-panel" aria-labelledby="formulario-titulo">
 				<div class="caja-panel-cabecera">
-					<div><span class="tag">Nuevo movimiento</span><h2 id="formulario-titulo">Registrar en caja</h2></div>
+					<div><span class="tag">Movimientos de caja</span><h2 id="formulario-titulo">Registrar en caja</h2></div>
 				</div>
+				<form id="editar-movimiento-form" class="caja-formulario caja-editar-formulario" hidden>
+					<div class="caja-editar-titulo"><h3>Editar movimiento</h3><button id="cancelar-edicion-movimiento" class="caja-eliminar" type="button">Cancelar</button></div>
+					<input name="id" type="hidden">
+					<label>Fecha
+						<input name="fecha" type="date" required>
+					</label>
+					<label>Tipo
+						<select name="tipo" required><option value="ingreso">Ingreso</option><option value="gasto">Egreso / Gasto</option></select>
+					</label>
+					<label>Servicio / concepto
+						<input name="concepto" type="text" maxlength="120" required>
+					</label>
+					<label>Categoría / Servicio
+						<select name="categoria" required>
+							<option value="Manicure">Manicure</option><option value="Nivelación">Nivelación</option><option value="Sistema Softgel">Sistema Softgel</option><option value="Sistema Acrílico">Sistema Acrílico</option><option value="Láser">Láser</option><option value="Retiro de Sistema">Retiro de Sistema</option><option value="Uña adicional">Uña adicional</option>
+							<option value="Manicura">Manicura</option><option value="Sistema Jelly">Sistema Jelly</option><option value="Sistema Dual">Sistema Dual</option><option value="Pedicure">Pedicure</option><option value="Quiropedia">Quiropedia</option><option value="Tratamiento Láser">Tratamiento Láser</option><option value="Insumos/Gastos">Insumos/Gastos</option>
+						</select>
+					</label>
+					<label id="editar-categoria-gasto-campo" hidden>Categoría de gasto
+						<select name="categoriaGasto">
+							<option value="">Selecciona una categoría</option><option value="Limpieza">Limpieza</option><option value="Café / Atención al cliente">Café / Atención al cliente</option><option value="Materiales e insumos">Materiales e insumos</option><option value="Herramientas y equipos">Herramientas y equipos</option><option value="Otros gastos">Otros gastos</option>
+						</select>
+					</label>
+					<label>Método de pago
+						<select name="metodo" required><option value="Pago Móvil">Pago Móvil</option><option value="Binance Pay">Binance Pay</option><option value="Efectivo Bs">Efectivo Bs</option><option value="Efectivo">Efectivo (USD)</option><option value="Efectivo Euro">Efectivo (Euro)</option><option value="Efectivo USDT">Efectivo (USDT)</option></select>
+					</label>
+					<label id="editar-monto-usd-campo">Monto en divisa
+						<input name="montoUsd" type="text" inputmode="decimal" required>
+					</label>
+					<div id="editar-monto-bs-campos" class="caja-conversion-campos" hidden>
+						<label>Monto en Bolívares (Bs)
+							<input name="montoBs" type="text" inputmode="decimal">
+						</label>
+						<label>Tasa aplicada
+							<select name="tipoTasa"><option value="BCV">Tasa BCV</option><option value="EURO">Tasa Euro</option><option value="USDT">Tasa USDT</option></select>
+						</label>
+					</div>
+					<label id="editar-tipo-tasa-divisa-campo">Divisa del monto
+						<select name="tipoTasaDivisa"><option value="BCV">USD / tasa BCV</option><option value="EURO">Euro</option><option value="USDT">USDT</option></select>
+					</label>
+					<label>Tasa aplicada
+						<input name="tasaUsada" type="text" inputmode="decimal">
+					</label>
+					<div class="caja-formulario-acciones">
+						<button class="boton caja-submit" type="submit">Guardar cambios</button>
+					</div>
+				</form>
 				<form id="form-movimiento" class="caja-formulario" novalidate>
 					<label>Tipo
 						<select name="tipo" required>
@@ -299,92 +263,244 @@
 				</form>
 				<p id="caja-mensaje" class="caja-mensaje" role="status" aria-live="polite"></p>
 			</section>
-
-			<section class="caja-panel caja-historial" aria-labelledby="historial-titulo">
-				<div class="caja-panel-cabecera caja-historial-cabecera">
-					<div><span class="tag">Editar / Historial de Movimientos</span><h2 id="historial-titulo">Historial de movimientos</h2></div>
-					<div class="caja-historial-acciones">
-						<button id="toggle-historial-movimientos" class="caja-historial-toggle" type="button" aria-expanded="false" aria-controls="historial-contenido">Ver historial de movimientos (0 registros)</button>
-						<button id="exportar-xlsx" class="caja-exportar" type="button">Exportar a Excel (.xlsx)</button>
-					</div>
-				</div>
-				<div id="historial-contenido" class="caja-historial-contenido">
-					<div class="caja-historial-interior">
-						<div class="caja-filtros-historial">
-					<label>Tipo
-						<select id="filtro-tipo-movimiento">
-							<option value="" selected>Todos</option>
-							<option value="ingreso">Ingresos</option>
-							<option value="gasto">Egresos</option>
-						</select>
-					</label>
-					<label>Fecha específica
-						<input id="filtro-fecha-movimiento" type="date">
-					</label>
-					<label>Mes
-						<input id="filtro-mes-movimiento" type="month">
-					</label>
-					<button id="limpiar-filtros-movimiento" class="caja-exportar" type="button">Limpiar filtros</button>
-						</div>
-				<form id="editar-movimiento-form" class="caja-formulario caja-editar-formulario" hidden>
-					<div class="caja-editar-titulo"><h3>Editar movimiento</h3><button id="cancelar-edicion-movimiento" class="caja-eliminar" type="button">Cancelar</button></div>
-					<input name="id" type="hidden">
-					<label>Fecha
-						<input name="fecha" type="date" required>
-					</label>
-					<label>Tipo
-						<select name="tipo" required><option value="ingreso">Ingreso</option><option value="gasto">Egreso / Gasto</option></select>
-					</label>
-					<label>Servicio / concepto
-						<input name="concepto" type="text" maxlength="120" required>
-					</label>
-					<label>Categoría / Servicio
-						<select name="categoria" required>
-							<option value="Manicure">Manicure</option><option value="Nivelación">Nivelación</option><option value="Sistema Softgel">Sistema Softgel</option><option value="Sistema Acrílico">Sistema Acrílico</option><option value="Láser">Láser</option><option value="Retiro de Sistema">Retiro de Sistema</option><option value="Uña adicional">Uña adicional</option>
-							<option value="Manicura">Manicura</option><option value="Sistema Jelly">Sistema Jelly</option><option value="Sistema Dual">Sistema Dual</option><option value="Pedicure">Pedicure</option><option value="Quiropedia">Quiropedia</option><option value="Tratamiento Láser">Tratamiento Láser</option><option value="Insumos/Gastos">Insumos/Gastos</option>
-						</select>
-					</label>
-					<label id="editar-categoria-gasto-campo" hidden>Categoría de gasto
-						<select name="categoriaGasto">
-							<option value="">Selecciona una categoría</option><option value="Limpieza">Limpieza</option><option value="Café / Atención al cliente">Café / Atención al cliente</option><option value="Materiales e insumos">Materiales e insumos</option><option value="Herramientas y equipos">Herramientas y equipos</option><option value="Otros gastos">Otros gastos</option>
-						</select>
-					</label>
-					<label>Método de pago
-						<select name="metodo" required><option value="Pago Móvil">Pago Móvil</option><option value="Binance Pay">Binance Pay</option><option value="Efectivo Bs">Efectivo Bs</option><option value="Efectivo">Efectivo (USD)</option><option value="Efectivo Euro">Efectivo (Euro)</option><option value="Efectivo USDT">Efectivo (USDT)</option></select>
-					</label>
-					<label id="editar-monto-usd-campo">Monto en divisa
-						<input name="montoUsd" type="text" inputmode="decimal" required>
-					</label>
-					<div id="editar-monto-bs-campos" class="caja-conversion-campos" hidden>
-						<label>Monto en Bolívares (Bs)
-							<input name="montoBs" type="text" inputmode="decimal">
-						</label>
-						<label>Tasa aplicada
-							<select name="tipoTasa"><option value="BCV">Tasa BCV</option><option value="EURO">Tasa Euro</option><option value="USDT">Tasa USDT</option></select>
-						</label>
-					</div>
-					<label id="editar-tipo-tasa-divisa-campo">Divisa del monto
-						<select name="tipoTasaDivisa"><option value="BCV">USD / tasa BCV</option><option value="EURO">Euro</option><option value="USDT">USDT</option></select>
-					</label>
-					<label>Tasa aplicada
-						<input name="tasaUsada" type="text" inputmode="decimal">
-					</label>
-					<div class="caja-formulario-acciones">
-						<button class="boton caja-submit" type="submit">Guardar cambios</button>
-					</div>
-				</form>
-				<div class="caja-tabla-contenedor">
-					<table class="caja-tabla">
-						<thead>
-							<tr><th>Fecha</th><th>Tipo</th><th>Concepto</th><th>Categoría</th><th>Método</th><th class="caja-monto-col">Monto USD</th><th class="caja-monto-col">Monto Bs</th><th class="caja-monto-col">Tasa</th><th><span class="visually-hidden">Acciones</span></th></tr>
-						</thead>
-						<tbody id="movimientos-lista"></tbody>
-					</table>
-					<p id="historial-vacio" class="caja-vacio">Todavía no hay movimientos registrados.</p>
-					</div>
-				</div>
-			</section>
 			</div>
+
+			<section id="panel-estadisticas" class="admin-tab-panel" role="tabpanel" aria-labelledby="tab-estadisticas" hidden>
+				<!-- Bloque 1: KPIs Resumen Superior -->
+				<aside class="admin-contadores-rapidos" aria-label="Contadores rápidos de gestión">
+					<article class="admin-contador-card">
+						<span class="admin-contador-icono" aria-hidden="true">📅</span>
+						<div>
+							<span>Citas pendientes</span>
+							<strong id="rapido-citas-pendientes">0</strong>
+						</div>
+					</article>
+					<article class="admin-contador-card">
+						<span class="admin-contador-icono" aria-hidden="true">💳</span>
+						<div>
+							<span>Por cobrar (Fiado)</span>
+							<strong id="rapido-cuentas-cobrar">$0.00</strong>
+						</div>
+					</article>
+					<article class="admin-contador-card">
+						<span class="admin-contador-icono" aria-hidden="true">✨</span>
+						<div>
+							<span>Clientas registradas</span>
+							<strong id="rapido-total-clientas">0</strong>
+						</div>
+					</article>
+					<article class="admin-contador-card">
+						<span class="admin-contador-icono" aria-hidden="true">📊</span>
+						<div>
+							<span>Movimientos del día</span>
+							<strong id="rapido-movimientos-hoy">0</strong>
+						</div>
+					</article>
+				</aside>
+
+				<!-- Bloque 2: Gráficas y Rendimiento (Chart.js) -->
+				<section class="caja-panel caja-graficas-seccion" aria-labelledby="graficas-titulo">
+					<div class="caja-panel-cabecera caja-graficas-cabecera">
+						<div>
+							<span class="tag">Métricas visuales</span>
+							<h2 id="graficas-titulo">Gráficas y Rendimiento</h2>
+						</div>
+						<div class="caja-graficas-controles">
+							<label class="caja-graficas-label" for="graficas-periodo">Período:
+								<select id="graficas-periodo" class="caja-graficas-select">
+									<option value="mes" selected>Este mes</option>
+									<option value="historico">Histórico completo</option>
+								</select>
+							</label>
+							<button id="toggle-graficas" class="caja-historial-toggle" type="button" aria-expanded="true" aria-controls="graficas-contenido">Ocultar gráficas</button>
+						</div>
+					</div>
+					<div id="graficas-contenido" class="caja-graficas-contenido is-open">
+						<div class="caja-graficas-interior">
+							<div class="caja-graficas-grid">
+								<article class="caja-grafica-card">
+									<div class="caja-grafica-header">
+										<h3>Ingresos vs. Gastos (USD)</h3>
+										<span class="caja-grafica-sub" id="grafica-sub-balance">$0.00 neto</span>
+									</div>
+									<div class="caja-grafica-canvas-wrap">
+										<canvas id="chart-ingresos-gastos"></canvas>
+									</div>
+								</article>
+								<article class="caja-grafica-card">
+									<div class="caja-grafica-header">
+										<h3>Servicios más solicitados</h3>
+										<span class="caja-grafica-sub" id="grafica-sub-servicios">Top categorías</span>
+									</div>
+									<div class="caja-grafica-canvas-wrap">
+										<canvas id="chart-servicios"></canvas>
+									</div>
+								</article>
+								<article class="caja-grafica-card">
+									<div class="caja-grafica-header">
+										<h3>Métodos de pago</h3>
+										<span class="caja-grafica-sub" id="grafica-sub-metodos">Distribución</span>
+									</div>
+									<div class="caja-grafica-canvas-wrap">
+										<canvas id="chart-metodos-pago"></canvas>
+									</div>
+								</article>
+							</div>
+						</div>
+					</div>
+				</section>
+
+				<!-- Bloque 3: Historial de Movimientos -->
+				<section class="caja-panel caja-historial" aria-labelledby="historial-titulo">
+					<div class="caja-panel-cabecera caja-historial-cabecera">
+						<div><span class="tag">Auditoría / Registro completo</span><h2 id="historial-titulo">Historial de movimientos</h2></div>
+						<div class="caja-historial-acciones">
+							<button id="toggle-historial-movimientos" class="caja-historial-toggle" type="button" aria-expanded="false" aria-controls="historial-contenido">Ver historial de movimientos (0 registros)</button>
+							<button id="exportar-xlsx" class="caja-exportar" type="button">Exportar a Excel (.xlsx)</button>
+						</div>
+					</div>
+					<div id="historial-contenido" class="caja-historial-contenido">
+						<div class="caja-historial-interior">
+							<div class="caja-filtros-historial">
+								<label>Tipo
+									<select id="filtro-tipo-movimiento">
+										<option value="" selected>Todos</option>
+										<option value="ingreso">Ingresos</option>
+										<option value="gasto">Egresos</option>
+									</select>
+								</label>
+								<label>Fecha específica
+									<input id="filtro-fecha-movimiento" type="date">
+								</label>
+								<label>Mes
+									<input id="filtro-mes-movimiento" type="month">
+								</label>
+								<button id="limpiar-filtros-movimiento" class="caja-exportar" type="button">Limpiar filtros</button>
+							</div>
+							<div class="caja-tabla-contenedor">
+								<table class="caja-tabla">
+									<thead>
+										<tr><th>Fecha</th><th>Tipo</th><th>Concepto</th><th>Categoría</th><th>Método</th><th class="caja-monto-col">Monto USD</th><th class="caja-monto-col">Monto Bs</th><th class="caja-monto-col">Tasa</th><th><span class="visually-hidden">Acciones</span></th></tr>
+									</thead>
+									<tbody id="movimientos-lista"></tbody>
+								</table>
+								<p id="historial-vacio" class="caja-vacio">Todavía no hay movimientos registrados.</p>
+							</div>
+						</div>
+					</div>
+				</section>
+
+				<!-- Bloque 4: Estadísticas Detalladas -->
+				<section class="caja-panel" aria-labelledby="estadisticas-agenda-titulo">
+					<div class="caja-panel-cabecera">
+						<div><span class="tag">Datos reales</span><h2 id="estadisticas-agenda-titulo">Estadísticas detalladas</h2></div>
+						<button id="toggle-estadisticas-agenda" class="caja-historial-toggle" type="button" aria-expanded="false" aria-controls="estadisticas-agenda-contenido">Mostrar estadísticas</button>
+					</div>
+					<div id="estadisticas-agenda-contenido" class="admin-collapsible-contenido">
+						<div class="admin-collapsible-interior">
+							<div class="agenda-metricas">
+								<article class="caja-card"><span>Clientas únicas totales</span><strong id="metric-clientas-unicas">—</strong></article>
+								<article class="caja-card"><span>Citas atendidas este mes</span><strong id="metric-citas-mes">—</strong></article>
+								<article class="caja-card"><span>Clientas nuevas por referencia</span><strong id="metric-clientas-referidas">—</strong></article>
+								<article class="caja-card caja-card-deuda"><span>Total Cuentas por Cobrar (Fiado)</span><strong id="metric-cuentas-por-cobrar">$0.00</strong></article>
+							</div>
+							<div class="agenda-estadisticas-grid">
+								<div class="caja-metodos">
+									<h3>Top 5 clientas más frecuentes</h3>
+									<ol id="agenda-top-clientas" class="agenda-lista-metricas"></ol>
+								</div>
+								<div class="caja-metodos">
+									<h3>Distribución de servicios</h3>
+									<ul id="agenda-distribucion-servicios" class="agenda-lista-metricas"></ul>
+								</div>
+							</div>
+							<p id="agenda-estadisticas-mensaje" class="agenda-mensaje" role="status" aria-live="polite"></p>
+						</div>
+					</div>
+				</section>
+			</section>
+			<section id="panel-agenda" class="admin-tab-panel admin-agenda-panel" role="tabpanel" aria-labelledby="tab-agenda" hidden>
+				<section class="caja-panel" aria-labelledby="agenda-config-titulo">
+					<div class="caja-panel-cabecera">
+						<div><span class="tag">Disponibilidad</span><h2 id="agenda-config-titulo">Horario de atención</h2></div>
+						<p id="agenda-config-mensaje" class="agenda-mensaje" role="status" aria-live="polite"></p>
+					</div>
+					<form id="agenda-config-form" class="agenda-admin-form">
+						<fieldset class="agenda-grupo agenda-dias">
+							<legend>Días laborables</legend>
+							<div class="agenda-servicios">
+								<label><input type="checkbox" name="dias" value="1"> Lunes</label>
+								<label><input type="checkbox" name="dias" value="2"> Martes</label>
+								<label><input type="checkbox" name="dias" value="3"> Miércoles</label>
+								<label><input type="checkbox" name="dias" value="4"> Jueves</label>
+								<label><input type="checkbox" name="dias" value="5"> Viernes</label>
+								<label><input type="checkbox" name="dias" value="6"> Sábado</label>
+								<label><input type="checkbox" name="dias" value="0"> Domingo</label>
+							</div>
+						</fieldset>
+						<label>Hora de apertura
+							<input name="horaApertura" type="time" value="09:00" required>
+						</label>
+						<label>Hora de cierre
+							<input name="horaCierre" type="time" value="18:00" required>
+						</label>
+						<button class="caja-exportar" type="submit">Guardar horario</button>
+					</form>
+				</section>
+
+				<section class="caja-panel" aria-labelledby="bloqueo-titulo">
+					<div class="caja-panel-cabecera">
+						<div><span class="tag">Excepciones</span><h2 id="bloqueo-titulo">Bloqueos puntuales</h2></div>
+					</div>
+					<form id="agenda-bloqueo-form" class="agenda-admin-form">
+						<label>Fecha
+							<input name="fecha" type="date" required>
+						</label>
+						<label class="agenda-bloqueo-completo"><input name="diaCompleto" type="checkbox"> Bloquear el día completo</label>
+						<label>Desde
+							<input name="horaInicio" type="time" value="12:00" required>
+						</label>
+						<label>Hasta
+							<input name="horaFin" type="time" value="14:00" required>
+						</label>
+						<button class="caja-exportar" type="submit">Agregar bloqueo</button>
+					</form>
+					<ul id="agenda-bloqueos-lista" class="agenda-bloqueos-lista"></ul>
+				</section>
+
+				<section class="caja-panel" aria-labelledby="citas-titulo">
+					<div class="caja-panel-cabecera">
+						<div><span class="tag">Reservas</span><h2 id="citas-titulo">Citas</h2></div>
+						<p id="citas-admin-mensaje" class="agenda-mensaje" role="status" aria-live="polite"></p>
+					</div>
+					<div class="agenda-bloque-citas-activas">
+						<h3 class="agenda-subtitulo-citas">Citas activas y próximas (<span id="cont-citas-activas">0</span>)</h3>
+						<div class="caja-tabla-contenedor">
+							<table class="caja-tabla agenda-citas-tabla">
+								<thead><tr><th>Fecha y hora</th><th>Clienta</th><th>Servicios</th><th>Duración</th><th>Estado</th><th>Acción</th></tr></thead>
+								<tbody id="agenda-citas-lista"></tbody>
+							</table>
+							<p id="agenda-citas-vacio" class="caja-vacio">No hay citas activas o próximas registradas.</p>
+						</div>
+					</div>
+					<div class="agenda-bloque-citas-archivadas">
+						<div class="agenda-citas-archivadas-cabecera">
+							<button id="toggle-citas-archivadas" class="caja-historial-toggle" type="button" aria-expanded="false" aria-controls="agenda-citas-archivadas-contenido">Ver citas anteriores o canceladas (0)</button>
+						</div>
+						<div id="agenda-citas-archivadas-contenido" class="admin-collapsible-contenido">
+							<div class="admin-collapsible-interior">
+								<div class="caja-tabla-contenedor" style="margin-top: 14px;">
+									<table class="caja-tabla agenda-citas-tabla">
+										<thead><tr><th>Fecha y hora</th><th>Clienta</th><th>Servicios</th><th>Duración</th><th>Estado</th><th>Acción</th></tr></thead>
+										<tbody id="agenda-citas-archivadas-lista"></tbody>
+									</table>
+									<p id="agenda-citas-archivadas-vacio" class="caja-vacio">No hay citas anteriores ni canceladas.</p>
+								</div>
+							</div>
+						</div>
+					</div>
+				</section>
+			</section>
 			<section id="panel-club" class="admin-tab-panel admin-club-panel" role="tabpanel" aria-labelledby="tab-club" hidden>
 				<div class="caja-panel-cabecera">
 					<div><span class="tag">Club MayNails</span><h2>Gestión de tarjetas</h2></div>
@@ -511,116 +627,6 @@
 						<div class="admin-collapsible-interior">
 							<div id="clientas-deuda-lista" class="admin-clientas-grid"></div>
 							<p id="clientas-deuda-vacio" class="caja-vacio" hidden>No hay clientas que coincidan con este filtro.</p>
-						</div>
-					</div>
-				</section>
-			</section>
-			<section id="panel-agenda" class="admin-tab-panel admin-agenda-panel" role="tabpanel" aria-labelledby="tab-agenda" hidden>
-				<section class="caja-panel" aria-labelledby="agenda-config-titulo">
-					<div class="caja-panel-cabecera">
-						<div><span class="tag">Disponibilidad</span><h2 id="agenda-config-titulo">Horario de atención</h2></div>
-						<p id="agenda-config-mensaje" class="agenda-mensaje" role="status" aria-live="polite"></p>
-					</div>
-					<form id="agenda-config-form" class="agenda-admin-form">
-						<fieldset class="agenda-grupo agenda-dias">
-							<legend>Días laborables</legend>
-							<div class="agenda-servicios">
-								<label><input type="checkbox" name="dias" value="1"> Lunes</label>
-								<label><input type="checkbox" name="dias" value="2"> Martes</label>
-								<label><input type="checkbox" name="dias" value="3"> Miércoles</label>
-								<label><input type="checkbox" name="dias" value="4"> Jueves</label>
-								<label><input type="checkbox" name="dias" value="5"> Viernes</label>
-								<label><input type="checkbox" name="dias" value="6"> Sábado</label>
-								<label><input type="checkbox" name="dias" value="0"> Domingo</label>
-							</div>
-						</fieldset>
-						<label>Hora de apertura
-							<input name="horaApertura" type="time" value="09:00" required>
-						</label>
-						<label>Hora de cierre
-							<input name="horaCierre" type="time" value="18:00" required>
-						</label>
-						<button class="caja-exportar" type="submit">Guardar horario</button>
-					</form>
-				</section>
-
-				<section class="caja-panel" aria-labelledby="bloqueo-titulo">
-					<div class="caja-panel-cabecera">
-						<div><span class="tag">Excepciones</span><h2 id="bloqueo-titulo">Bloqueos puntuales</h2></div>
-					</div>
-					<form id="agenda-bloqueo-form" class="agenda-admin-form">
-						<label>Fecha
-							<input name="fecha" type="date" required>
-						</label>
-						<label class="agenda-bloqueo-completo"><input name="diaCompleto" type="checkbox"> Bloquear el día completo</label>
-						<label>Desde
-							<input name="horaInicio" type="time" value="12:00" required>
-						</label>
-						<label>Hasta
-							<input name="horaFin" type="time" value="14:00" required>
-						</label>
-						<button class="caja-exportar" type="submit">Agregar bloqueo</button>
-					</form>
-					<ul id="agenda-bloqueos-lista" class="agenda-bloqueos-lista"></ul>
-				</section>
-
-				<section class="caja-panel" aria-labelledby="citas-titulo">
-					<div class="caja-panel-cabecera">
-						<div><span class="tag">Reservas</span><h2 id="citas-titulo">Citas</h2></div>
-						<p id="citas-admin-mensaje" class="agenda-mensaje" role="status" aria-live="polite"></p>
-					</div>
-					<div class="agenda-bloque-citas-activas">
-						<h3 class="agenda-subtitulo-citas">Citas activas y próximas (<span id="cont-citas-activas">0</span>)</h3>
-						<div class="caja-tabla-contenedor">
-							<table class="caja-tabla agenda-citas-tabla">
-								<thead><tr><th>Fecha y hora</th><th>Clienta</th><th>Servicios</th><th>Duración</th><th>Estado</th><th>Acción</th></tr></thead>
-								<tbody id="agenda-citas-lista"></tbody>
-							</table>
-							<p id="agenda-citas-vacio" class="caja-vacio">No hay citas activas o próximas registradas.</p>
-						</div>
-					</div>
-					<div class="agenda-bloque-citas-archivadas">
-						<div class="agenda-citas-archivadas-cabecera">
-							<button id="toggle-citas-archivadas" class="caja-historial-toggle" type="button" aria-expanded="false" aria-controls="agenda-citas-archivadas-contenido">Ver citas anteriores o canceladas (0)</button>
-						</div>
-						<div id="agenda-citas-archivadas-contenido" class="admin-collapsible-contenido">
-							<div class="admin-collapsible-interior">
-								<div class="caja-tabla-contenedor" style="margin-top: 14px;">
-									<table class="caja-tabla agenda-citas-tabla">
-										<thead><tr><th>Fecha y hora</th><th>Clienta</th><th>Servicios</th><th>Duración</th><th>Estado</th><th>Acción</th></tr></thead>
-										<tbody id="agenda-citas-archivadas-lista"></tbody>
-									</table>
-									<p id="agenda-citas-archivadas-vacio" class="caja-vacio">No hay citas anteriores ni canceladas.</p>
-								</div>
-							</div>
-						</div>
-					</div>
-				</section>
-
-				<section class="caja-panel" aria-labelledby="estadisticas-agenda-titulo">
-					<div class="caja-panel-cabecera">
-						<div><span class="tag">Datos reales</span><h2 id="estadisticas-agenda-titulo">Estadísticas detalladas</h2></div>
-						<button id="toggle-estadisticas-agenda" class="caja-historial-toggle" type="button" aria-expanded="false" aria-controls="estadisticas-agenda-contenido">Mostrar estadísticas</button>
-					</div>
-					<div id="estadisticas-agenda-contenido" class="admin-collapsible-contenido">
-						<div class="admin-collapsible-interior">
-							<div class="agenda-metricas">
-								<article class="caja-card"><span>Clientas únicas totales</span><strong id="metric-clientas-unicas">—</strong></article>
-								<article class="caja-card"><span>Citas atendidas este mes</span><strong id="metric-citas-mes">—</strong></article>
-								<article class="caja-card"><span>Clientas nuevas por referencia</span><strong id="metric-clientas-referidas">—</strong></article>
-								<article class="caja-card caja-card-deuda"><span>Total Cuentas por Cobrar (Fiado)</span><strong id="metric-cuentas-por-cobrar">$0.00</strong></article>
-							</div>
-							<div class="agenda-estadisticas-grid">
-								<div class="caja-metodos">
-									<h3>Top 5 clientas más frecuentes</h3>
-									<ol id="agenda-top-clientas" class="agenda-lista-metricas"></ol>
-								</div>
-								<div class="caja-metodos">
-									<h3>Distribución de servicios</h3>
-									<ul id="agenda-distribucion-servicios" class="agenda-lista-metricas"></ul>
-								</div>
-							</div>
-							<p id="agenda-estadisticas-mensaje" class="agenda-mensaje" role="status" aria-live="polite"></p>
 						</div>
 					</div>
 				</section>
