@@ -11,8 +11,6 @@ import {
 
 const EMAILJS_SERVICE_ID = "service_j43z63s";
 const EMAILJS_TEMPLATE_ID = "template_uj5rara";
-const EMAILJS_TEMPLATE_ID_ADMIN = "template_uj5rara";
-const EMAILJS_TEMPLATE_ID_CLIENTE = "template_uj5rara";
 const EMAILJS_PUBLIC_KEY = "vsuRicFwrzOHSbliL";
 const ADMIN_EMAIL = "mayracmarin25@gmail.com";
 const citasRef = collection(db, "citas");
@@ -36,56 +34,29 @@ const SERVICIOS_PIES = new Set(["Pedicure", "Quiropedia", "Láser"]);
 let duracionTotal = 0;
 let cargaDisponibilidad = 0;
 let horaSeleccionada = "";
-let emailJsPromise = null;
-let emailJsInicializado = false;
 
-function emailJsConfigurado(templateId) {
-	return Boolean(
-		EMAILJS_SERVICE_ID &&
-		templateId &&
-		EMAILJS_PUBLIC_KEY &&
-		![EMAILJS_SERVICE_ID, templateId, EMAILJS_PUBLIC_KEY]
-			.some((valor) => valor.startsWith("YOUR_"))
-	);
-}
+async function enviarCorreoDirecto(parametros, destinatario = "la administradora") {
+	const payload = {
+		service_id: EMAILJS_SERVICE_ID,
+		template_id: EMAILJS_TEMPLATE_ID,
+		user_id: EMAILJS_PUBLIC_KEY,
+		template_params: parametros
+	};
 
-function plantillaEmail(templateIdEspecifico) {
-	return templateIdEspecifico && !templateIdEspecifico.startsWith("YOUR_")
-		? templateIdEspecifico
-		: EMAILJS_TEMPLATE_ID;
-}
-
-function cargarEmailJs() {
-	if (window.emailjs) return Promise.resolve(window.emailjs);
-	if (!emailJsPromise) {
-		emailJsPromise = new Promise((resolve, reject) => {
-			const script = document.createElement("script");
-			script.src = "https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js";
-			script.onload = () => window.emailjs
-				? resolve(window.emailjs)
-				: reject(new Error("El SDK de EmailJS no quedó disponible."));
-			script.onerror = () => reject(new Error("No se pudo cargar el SDK de EmailJS."));
-			document.head.append(script);
-		});
-	}
-	return emailJsPromise;
-}
-
-async function enviarCorreo(templateId, parametros, destino) {
-	if (!emailJsConfigurado(templateId)) {
-		console.info(`EmailJS no está configurado; se omite el correo de ${destino}.`);
-		return;
-	}
 	try {
-		const emailjs = await cargarEmailJs();
-		if (!emailJsInicializado) {
-			emailjs.init({ publicKey: EMAILJS_PUBLIC_KEY });
-			emailJsInicializado = true;
+		const respuesta = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(payload)
+		});
+		const textoRespuesta = await respuesta.text();
+		if (respuesta.ok) {
+			console.log(`[EmailJS] Notificación enviada con éxito a ${destinatario} (HTTP ${respuesta.status}):`, textoRespuesta);
+		} else {
+			console.error(`[EmailJS] Error HTTP ${respuesta.status} enviando a ${destinatario}:`, textoRespuesta);
 		}
-		await emailjs.send(EMAILJS_SERVICE_ID, templateId, parametros);
-		console.info(`Notificación por correo enviada a ${destino}.`);
 	} catch (error) {
-		console.error(`No se pudo enviar el correo de ${destino}; la reserva sí quedó guardada.`, error);
+		console.error(`[EmailJS] Error de conexión enviando notificación a ${destinatario}:`, error);
 	}
 }
 
@@ -538,31 +509,29 @@ formulario.addEventListener("submit", async (evento) => {
 			console.error("La cita se guardó, pero no se pudieron generar los enlaces de calendario.", error);
 		}
 		const parametrosCorreo = {
+			to_email: ADMIN_EMAIL,
 			cliente_nombre: nombre,
-			cliente_telefono: telefono,
+			name: nombre,
+			cliente_telefono: normalizarTelefonoVE(telefono) || telefono,
 			cliente_email: email || "No indicado",
-			servicios: resumenServicios,
-			acompanantes: acompanantes || "Ninguna",
 			fecha,
 			hora,
+			servicios: resumenServicios,
 			duracion: formatoDuracion(duracionTotal),
+			acompanantes: acompanantes || "Ninguna",
 			notas: notas || "Sin notas",
-			google_calendar_url: enlaces.google_calendar_url,
-			ics_data_url: enlaces.ics_data_url
+			google_calendar_url: enlaces.google_calendar_url || "",
+			ics_data_url: enlaces.ics_data_url || ""
 		};
-		const enviosCorreo = [
-			enviarCorreo(plantillaEmail(EMAILJS_TEMPLATE_ID_ADMIN), {
-				...parametrosCorreo,
-				to_email: ADMIN_EMAIL
-			}, "la administradora")
-		];
+
+		// Envío incondicional a la administradora sin bloquear la confirmación a la clienta
+		enviarCorreoDirecto(parametrosCorreo, "la administradora (mayracmarin25@gmail.com)");
 		if (email) {
-			enviosCorreo.push(enviarCorreo(plantillaEmail(EMAILJS_TEMPLATE_ID_CLIENTE), {
+			enviarCorreoDirecto({
 				...parametrosCorreo,
 				to_email: email
-			}, "la clienta"));
+			}, `la clienta (${email})`);
 		}
-		void Promise.allSettled(enviosCorreo);
 		formulario.reset();
 		referidasLista.replaceChildren();
 		fechaInput.min = fechaLocal();

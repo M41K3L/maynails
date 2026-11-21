@@ -180,6 +180,40 @@ let clubEnCurso = false;
 let clientas = [];
 let cancelarFidelidad = null;
 
+// Elementos de contadores rápidos ejecutivos
+const rapidoCitasPendientes = document.getElementById("rapido-citas-pendientes");
+const rapidoCuentasCobrar = document.getElementById("rapido-cuentas-cobrar");
+const rapidoTotalClientas = document.getElementById("rapido-total-clientas");
+const rapidoMovimientosHoy = document.getElementById("rapido-movimientos-hoy");
+
+// Elementos de Gráficas y Rendimiento (Chart.js)
+const toggleGraficas = document.getElementById("toggle-graficas");
+const graficasContenido = document.getElementById("graficas-contenido");
+const graficasPeriodo = document.getElementById("graficas-periodo");
+const graficaSubBalance = document.getElementById("grafica-sub-balance");
+const graficaSubServicios = document.getElementById("grafica-sub-servicios");
+const graficaSubMetodos = document.getElementById("grafica-sub-metodos");
+let graficasAbiertas = true;
+let chartIngresosGastosInstance = null;
+let chartServiciosInstance = null;
+let chartMetodosPagoInstance = null;
+
+// Elementos de Colapsables (Club MayNails y Agenda)
+const toggleClientasListado = document.getElementById("toggle-clientas-listado");
+const clientasListadoContenido = document.getElementById("clientas-listado-contenido");
+let clientasListadoAbierto = false;
+
+const toggleCitasArchivadas = document.getElementById("toggle-citas-archivadas");
+const agendaCitasArchivadasContenido = document.getElementById("agenda-citas-archivadas-contenido");
+const agendaCitasArchivadasLista = document.getElementById("agenda-citas-archivadas-lista");
+const agendaCitasArchivadasVacio = document.getElementById("agenda-citas-archivadas-vacio");
+const contCitasActivas = document.getElementById("cont-citas-activas");
+let citasArchivadasAbiertas = false;
+
+const toggleEstadisticasAgenda = document.getElementById("toggle-estadisticas-agenda");
+const estadisticasAgendaContenido = document.getElementById("estadisticas-agenda-contenido");
+let estadisticasAgendaAbiertas = false;
+
 isSupported()
 	.then((soportado) => {
 		if (soportado) getAnalytics(firebaseApp);
@@ -433,6 +467,376 @@ function establecerHistorialAbierto(abierto) {
 		: `Ver historial de movimientos (${movimientos.length} ${movimientos.length === 1 ? "registro" : "registros"})`;
 }
 
+function establecerGraficasAbiertas(abierto) {
+	graficasAbiertas = Boolean(abierto);
+	if (graficasContenido) {
+		graficasContenido.classList.toggle("is-open", graficasAbiertas);
+	}
+	if (toggleGraficas) {
+		toggleGraficas.setAttribute("aria-expanded", String(graficasAbiertas));
+		toggleGraficas.textContent = graficasAbiertas ? "Ocultar gráficas" : "Mostrar gráficas y rendimiento";
+	}
+}
+
+function establecerClientasListadoAbierto(abierto) {
+	clientasListadoAbierto = Boolean(abierto);
+	if (clientasListadoContenido) {
+		clientasListadoContenido.classList.toggle("is-open", clientasListadoAbierto);
+	}
+	if (toggleClientasListado) {
+		toggleClientasListado.setAttribute("aria-expanded", String(clientasListadoAbierto));
+		toggleClientasListado.textContent = clientasListadoAbierto
+			? "Ocultar listado"
+			: `Mostrar listado (${clientas.length})`;
+	}
+}
+
+function establecerCitasArchivadasAbierto(abierto) {
+	citasArchivadasAbiertas = Boolean(abierto);
+	if (agendaCitasArchivadasContenido) {
+		agendaCitasArchivadasContenido.classList.toggle("is-open", citasArchivadasAbiertas);
+	}
+	if (toggleCitasArchivadas) {
+		const totalArchivadas = citasAgenda.filter((cita) => cita.estado === "cancelada" || cita.estado === "atendida").length;
+		toggleCitasArchivadas.setAttribute("aria-expanded", String(citasArchivadasAbiertas));
+		toggleCitasArchivadas.textContent = citasArchivadasAbiertas
+			? "Ocultar citas anteriores o canceladas"
+			: `Ver citas anteriores o canceladas (${totalArchivadas})`;
+	}
+}
+
+function establecerEstadisticasAgendaAbierto(abierto) {
+	estadisticasAgendaAbiertas = Boolean(abierto);
+	if (estadisticasAgendaContenido) {
+		estadisticasAgendaContenido.classList.toggle("is-open", estadisticasAgendaAbiertas);
+	}
+	if (toggleEstadisticasAgenda) {
+		toggleEstadisticasAgenda.setAttribute("aria-expanded", String(estadisticasAgendaAbiertas));
+		toggleEstadisticasAgenda.textContent = estadisticasAgendaAbiertas
+			? "Ocultar estadísticas"
+			: "Mostrar estadísticas detalladas (4 métricas)";
+	}
+}
+
+function actualizarContadoresRapidos() {
+	if (rapidoCitasPendientes) {
+		const pendientes = citasAgenda.filter((cita) => cita.estado === "solicitada").length;
+		rapidoCitasPendientes.textContent = String(pendientes);
+	}
+	if (rapidoCuentasCobrar) {
+		const totalFiado = clientas.reduce((acc, c) => acc + (Number(c.saldoPendienteUsd) || 0), 0);
+		rapidoCuentasCobrar.textContent = formatoDinero.format(totalFiado);
+	}
+	if (rapidoTotalClientas) {
+		rapidoTotalClientas.textContent = String(clientas.length);
+	}
+	if (rapidoMovimientosHoy) {
+		const hoy = fechaLocal();
+		const hoyCount = movimientos.filter((m) => normalizarFechaMovimiento(m.fecha) === hoy).length;
+		rapidoMovimientosHoy.textContent = String(hoyCount);
+	}
+}
+
+function actualizarGraficas() {
+	if (typeof window.Chart === "undefined") {
+		console.warn("Chart.js aún no está disponible en la ventana.");
+		return;
+	}
+
+	const periodo = graficasPeriodo ? graficasPeriodo.value : "mes";
+	const mesActual = fechaLocal().slice(0, 7);
+
+	// Filtrar movimientos según el período seleccionado
+	const movimientosFiltrados = periodo === "mes"
+		? movimientos.filter((m) => normalizarFechaMovimiento(m.fecha).startsWith(mesActual))
+		: [...movimientos];
+
+	// Paleta Lujo y Glamour
+	const colores = {
+		primario: "#6E212A",
+		rosaSuave: "#B76E79",
+		rosaPastel: "#D2929A",
+		borde: "#E6D3D1",
+		oscuro: "#2C2425",
+		vinoMedio: "#8B2F3C",
+		nudePerla: "#C4A4A4",
+		suaveFondo: "#F2E7E6"
+	};
+	const paletaDona = [
+		colores.primario,
+		colores.rosaSuave,
+		colores.oscuro,
+		colores.vinoMedio,
+		colores.rosaPastel,
+		colores.nudePerla,
+		"#9E5762",
+		"#4A141A"
+	];
+
+	// 1. Gráfica de Ingresos vs. Gastos (USD)
+	const canvasIngresosGastos = document.getElementById("chart-ingresos-gastos");
+	if (canvasIngresosGastos) {
+		let labels = [];
+		let datosIngresos = [];
+		let datosGastos = [];
+		let sumaIngresos = 0;
+		let sumaGastos = 0;
+
+		if (periodo === "mes") {
+			// Agrupar por días del mes
+			const mapaDias = new Map();
+			for (const mov of movimientosFiltrados) {
+				const fecha = normalizarFechaMovimiento(mov.fecha);
+				if (!fecha) continue;
+				const dia = fecha.slice(8, 10);
+				if (!mapaDias.has(dia)) mapaDias.set(dia, { ingresos: 0, gastos: 0 });
+				const item = mapaDias.get(dia);
+				const monto = Number(mov.montoUsd || mov.equivalenteUsd || 0);
+				if (mov.tipo === "ingreso" && !mov.esFiado && mov.metodo !== METODO_FIADO) {
+					item.ingresos += monto;
+					sumaIngresos += monto;
+				} else if (mov.tipo === "gasto") {
+					item.gastos += monto;
+					sumaGastos += monto;
+				}
+			}
+			const diasOrdenados = [...mapaDias.keys()].sort();
+			if (diasOrdenados.length === 0) {
+				labels = ["Sin datos del mes"];
+				datosIngresos = [0];
+				datosGastos = [0];
+			} else {
+				labels = diasOrdenados.map((d) => `Día ${d}`);
+				datosIngresos = diasOrdenados.map((d) => Math.round(mapaDias.get(d).ingresos * 100) / 100);
+				datosGastos = diasOrdenados.map((d) => Math.round(mapaDias.get(d).gastos * 100) / 100);
+			}
+		} else {
+			// Histórico completo agrupado por mes (YYYY-MM)
+			const mapaMeses = new Map();
+			for (const mov of movimientosFiltrados) {
+				const fecha = normalizarFechaMovimiento(mov.fecha);
+				if (!fecha) continue;
+				const mes = fecha.slice(0, 7);
+				if (!mapaMeses.has(mes)) mapaMeses.set(mes, { ingresos: 0, gastos: 0 });
+				const item = mapaMeses.get(mes);
+				const monto = Number(mov.montoUsd || mov.equivalenteUsd || 0);
+				if (mov.tipo === "ingreso" && !mov.esFiado && mov.metodo !== METODO_FIADO) {
+					item.ingresos += monto;
+					sumaIngresos += monto;
+				} else if (mov.tipo === "gasto") {
+					item.gastos += monto;
+					sumaGastos += monto;
+				}
+			}
+			const mesesOrdenados = [...mapaMeses.keys()].sort();
+			if (mesesOrdenados.length === 0) {
+				labels = ["Sin movimientos"];
+				datosIngresos = [0];
+				datosGastos = [0];
+			} else {
+				labels = mesesOrdenados.map((m) => {
+					const [y, mNum] = m.split("-");
+					const nombres = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
+					return `${nombres[Number(mNum) - 1] || mNum} ${y}`;
+				});
+				datosIngresos = mesesOrdenados.map((m) => Math.round(mapaMeses.get(m).ingresos * 100) / 100);
+				datosGastos = mesesOrdenados.map((m) => Math.round(mapaMeses.get(m).gastos * 100) / 100);
+			}
+		}
+
+		if (graficaSubBalance) {
+			const neto = sumaIngresos - sumaGastos;
+			const signo = neto >= 0 ? "+" : "";
+			graficaSubBalance.textContent = `Neto: ${signo}${formatoDinero.format(neto)}`;
+		}
+
+		if (chartIngresosGastosInstance) {
+			chartIngresosGastosInstance.destroy();
+		}
+		chartIngresosGastosInstance = new window.Chart(canvasIngresosGastos, {
+			type: "bar",
+			data: {
+				labels,
+				datasets: [
+					{
+						label: "Ingresos ($)",
+						data: datosIngresos,
+						backgroundColor: colores.primario,
+						borderColor: colores.primario,
+						borderRadius: 4,
+						maxBarThickness: 32
+					},
+					{
+						label: "Gastos ($)",
+						data: datosGastos,
+						backgroundColor: colores.rosaSuave,
+						borderColor: colores.rosaSuave,
+						borderRadius: 4,
+						maxBarThickness: 32
+					}
+				]
+			},
+			options: {
+				responsive: true,
+				maintainAspectRatio: false,
+				plugins: {
+					legend: {
+						position: "top",
+						labels: { boxWidth: 12, font: { size: 11, family: "Arial, sans-serif" } }
+					},
+					tooltip: {
+						callbacks: {
+							label: (ctx) => ` ${ctx.dataset.label}: ${formatoDinero.format(ctx.raw || 0)}`
+						}
+					}
+				},
+				scales: {
+					y: {
+						beginAtZero: true,
+						ticks: {
+							callback: (val) => `$${val}`,
+							font: { size: 10 }
+						},
+						grid: { color: "rgba(230, 211, 209, 0.4)" }
+					},
+					x: {
+						ticks: { font: { size: 10 } },
+						grid: { display: false }
+					}
+				}
+			}
+		});
+	}
+
+	// 2. Gráfica de Servicios más solicitados / rentables
+	const canvasServicios = document.getElementById("chart-servicios");
+	if (canvasServicios) {
+		const mapaServicios = new Map();
+		const ingresosPeriodo = movimientosFiltrados.filter((m) => m.tipo === "ingreso" && !m.esFiado && m.metodo !== METODO_FIADO);
+
+		for (const mov of ingresosPeriodo) {
+			const cat = mov.categoria || "Otros servicios";
+			const monto = Number(mov.montoUsd || mov.equivalenteUsd || 0);
+			mapaServicios.set(cat, (mapaServicios.get(cat) || 0) + monto);
+		}
+
+		// Si hay pocos movimientos de ingresos, complementar con citas atendidas
+		if (mapaServicios.size === 0) {
+			for (const cita of citasAgenda) {
+				for (const serv of (Array.isArray(cita.servicios) ? cita.servicios : [])) {
+					mapaServicios.set(serv, (mapaServicios.get(serv) || 0) + 1);
+				}
+			}
+		}
+
+		const serviciosOrdenados = [...mapaServicios.entries()]
+			.sort((a, b) => b[1] - a[1]);
+
+		let topServicios = serviciosOrdenados.slice(0, 6);
+		const otrosServicios = serviciosOrdenados.slice(6);
+		if (otrosServicios.length > 0) {
+			const sumaOtros = otrosServicios.reduce((acc, curr) => acc + curr[1], 0);
+			topServicios.push(["Otros", sumaOtros]);
+		}
+
+		const labelsServicios = topServicios.length > 0 ? topServicios.map((s) => s[0]) : ["Sin registros"];
+		const datosServicios = topServicios.length > 0 ? topServicios.map((s) => Math.round(s[1] * 100) / 100) : [0];
+
+		if (graficaSubServicios && topServicios.length > 0) {
+			graficaSubServicios.textContent = `${topServicios[0][0]}: ${formatoDinero.format(topServicios[0][1])}`;
+		}
+
+		if (chartServiciosInstance) {
+			chartServiciosInstance.destroy();
+		}
+		chartServiciosInstance = new window.Chart(canvasServicios, {
+			type: "doughnut",
+			data: {
+				labels: labelsServicios,
+				datasets: [
+					{
+						data: datosServicios,
+						backgroundColor: paletaDona.slice(0, labelsServicios.length),
+						borderColor: "#fff",
+						borderWidth: 2
+					}
+				]
+			},
+			options: {
+				responsive: true,
+				maintainAspectRatio: false,
+				cutout: "62%",
+				plugins: {
+					legend: {
+						position: "right",
+						labels: { boxWidth: 10, font: { size: 10, family: "Arial, sans-serif" } }
+					},
+					tooltip: {
+						callbacks: {
+							label: (ctx) => ` ${ctx.label}: ${formatoDinero.format(ctx.raw || 0)}`
+						}
+					}
+				}
+			}
+		});
+	}
+
+	// 3. Gráfica de Métodos de pago más usados
+	const canvasMetodos = document.getElementById("chart-metodos-pago");
+	if (canvasMetodos) {
+		const mapaMetodos = new Map();
+		const ingresosPeriodo = movimientosFiltrados.filter((m) => m.tipo === "ingreso" && !m.esFiado && m.metodo !== METODO_FIADO);
+
+		for (const mov of ingresosPeriodo) {
+			const met = mov.metodo || "Otro";
+			const monto = Number(mov.montoUsd || mov.equivalenteUsd || 0);
+			mapaMetodos.set(met, (mapaMetodos.get(met) || 0) + monto);
+		}
+
+		const metodosOrdenados = [...mapaMetodos.entries()].sort((a, b) => b[1] - a[1]);
+		const labelsMetodos = metodosOrdenados.length > 0 ? metodosOrdenados.map((m) => m[0]) : ["Sin cobros"];
+		const datosMetodos = metodosOrdenados.length > 0 ? metodosOrdenados.map((m) => Math.round(m[1] * 100) / 100) : [0];
+
+		if (graficaSubMetodos && metodosOrdenados.length > 0) {
+			graficaSubMetodos.textContent = `Top: ${metodosOrdenados[0][0]}`;
+		}
+
+		if (chartMetodosPagoInstance) {
+			chartMetodosPagoInstance.destroy();
+		}
+		chartMetodosPagoInstance = new window.Chart(canvasMetodos, {
+			type: "doughnut",
+			data: {
+				labels: labelsMetodos,
+				datasets: [
+					{
+						data: datosMetodos,
+						backgroundColor: paletaDona.slice(0, labelsMetodos.length),
+						borderColor: "#fff",
+						borderWidth: 2
+					}
+				]
+			},
+			options: {
+				responsive: true,
+				maintainAspectRatio: false,
+				cutout: "62%",
+				plugins: {
+					legend: {
+						position: "right",
+						labels: { boxWidth: 10, font: { size: 10, family: "Arial, sans-serif" } }
+					},
+					tooltip: {
+						callbacks: {
+							label: (ctx) => ` ${ctx.label}: ${formatoDinero.format(ctx.raw || 0)}`
+						}
+					}
+				}
+			}
+		});
+	}
+}
+
 function mostrarMensaje(texto, esError) {
 	mensaje.textContent = texto;
 	mensaje.classList.toggle("es-error", Boolean(esError));
@@ -597,6 +1001,8 @@ function sumarMetodo(lista, metodo) {
 function renderizar() {
 	actualizarResumen();
 	renderizarHistorial();
+	actualizarGraficas();
+	actualizarContadoresRapidos();
 }
 
 function exportarXlsx() {
@@ -716,6 +1122,8 @@ function escucharMovimientos(usuario) {
 		console.log("Movimientos recibidos en UI:", movimientos.length);
 		actualizarResumen();
 		renderizarHistorial();
+		actualizarGraficas();
+		actualizarContadoresRapidos();
 		mostrarMensaje("", false);
 	}, (error) => {
 		console.error("No se pudieron cargar los movimientos de Firestore.", error);
@@ -1242,6 +1650,26 @@ document.getElementById("limpiar-filtros-movimiento").addEventListener("click", 
 	renderizarHistorial();
 });
 establecerHistorialAbierto(false);
+establecerGraficasAbiertas(true);
+establecerClientasListadoAbierto(false);
+establecerCitasArchivadasAbierto(false);
+establecerEstadisticasAgendaAbierto(false);
+
+if (toggleGraficas) {
+	toggleGraficas.addEventListener("click", () => establecerGraficasAbiertas(!graficasAbiertas));
+}
+if (graficasPeriodo) {
+	graficasPeriodo.addEventListener("change", actualizarGraficas);
+}
+if (toggleClientasListado) {
+	toggleClientasListado.addEventListener("click", () => establecerClientasListadoAbierto(!clientasListadoAbierto));
+}
+if (toggleCitasArchivadas) {
+	toggleCitasArchivadas.addEventListener("click", () => establecerCitasArchivadasAbierto(!citasArchivadasAbiertas));
+}
+if (toggleEstadisticasAgenda) {
+	toggleEstadisticasAgenda.addEventListener("click", () => establecerEstadisticasAgendaAbierto(!estadisticasAgendaAbiertas));
+}
 document.getElementById("cancelar-edicion-movimiento").addEventListener("click", cancelarEdicion);
 filtroDeudaClientas.addEventListener("change", renderizarClientasDeuda);
 clubRegistrarAbonoButton.addEventListener("click", async () => {
@@ -1560,6 +1988,9 @@ function crearControlAbono(clienta) {
 function renderizarClientasDeuda() {
 	llenarSelectorClientasFiado();
 	const filtro = filtroDeudaClientas.value;
+	if (filtro !== "todas") {
+		establecerClientasListadoAbierto(true);
+	}
 	const filtradas = [...clientas]
 		.filter((clienta) => filtro === "todas" || (filtro === "deuda" ? clienta.saldoPendienteUsd > 0 : clienta.saldoPendienteUsd <= 0))
 		.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
@@ -1611,6 +2042,12 @@ function renderizarClientasDeuda() {
 		clientasDeudaLista.append(tarjeta);
 	}
 	actualizarTotalCuentasPorCobrar();
+	if (toggleClientasListado) {
+		toggleClientasListado.textContent = clientasListadoAbierto
+			? "Ocultar listado"
+			: `Mostrar listado (${clientas.length})`;
+	}
+	actualizarContadoresRapidos();
 }
 
 function escucharFidelidad(usuario) {
@@ -1960,114 +2397,143 @@ function googleCalendarUrlCita(cita, titular) {
 	return url.href;
 }
 
+function crearFilaCita(cita) {
+	const fila = document.createElement("tr");
+	const datos = cita.datos || {};
+	const titular = datos.titular || {};
+	fila.append(
+		celdaTabla(`${fechaLegible(cita.fecha)} · ${cita.hora}`),
+		celdaTabla(titular.nombre || "Clienta"),
+		celdaTabla(Array.isArray(cita.servicios) ? [...new Set(cita.servicios)].join(", ") : "—"),
+		celdaTabla(`${cita.duracionMin || 0} min${Number(cita.participantes) > 1 ? ` · ${cita.participantes} personas` : ""}`)
+	);
+	const estadoCelda = document.createElement("td");
+	const estado = document.createElement("select");
+	estado.setAttribute("aria-label", `Estado de la cita de ${titular.nombre || "clienta"} del ${fechaLegible(cita.fecha)}`);
+	for (const [valor, etiqueta] of [
+		["solicitada", "Solicitada"],
+		["confirmada", "Confirmada"],
+		["atendida", "Atendida"],
+		["cancelada", "Cancelada"]
+	]) estado.add(new Option(etiqueta, valor));
+	estado.value = cita.estado;
+	estadoCelda.append(estado);
+	const accionCelda = document.createElement("td");
+	const urlGoogleCalendar = googleCalendarUrlCita(cita, titular);
+	if (urlGoogleCalendar) {
+		const googleCalendar = document.createElement("a");
+		googleCalendar.className = "caja-exportar";
+		googleCalendar.href = urlGoogleCalendar;
+		googleCalendar.target = "_blank";
+		googleCalendar.rel = "noopener";
+		googleCalendar.textContent = "Google Calendar";
+		accionCelda.append(googleCalendar);
+	}
+	const telefonoClienta = normalizarTelefonoVE(titular.telefonoNormalizado || titular.telefono);
+	if (telefonoClienta) {
+		const resumenWhatsApp = `Hola ${titular.nombre || ""}, te escribimos de MayNails Studio por tu cita del ${fechaLegible(cita.fecha)} a las ${cita.hora}. Servicios: ${Array.isArray(cita.servicios) ? cita.servicios.join(", ") : "por confirmar"}. Duración: ${cita.duracionMin || 0} minutos.`;
+		const whatsapp = document.createElement("a");
+		whatsapp.className = "caja-exportar";
+		whatsapp.href = `https://wa.me/${telefonoClienta.replace(/\D/g, "")}?text=${encodeURIComponent(resumenWhatsApp)}`;
+		whatsapp.target = "_blank";
+		whatsapp.rel = "noopener";
+		whatsapp.textContent = "WhatsApp";
+		accionCelda.append(whatsapp);
+	}
+	const clientaExistente = clientas.find((clienta) =>
+		telefonoClienta &&
+		normalizarTelefonoVE(clienta.telefonoNormalizado || clienta.telefono) === telefonoClienta
+	);
+	if (clientaExistente) {
+		const abrirFicha = document.createElement("button");
+		abrirFicha.type = "button";
+		abrirFicha.className = "caja-exportar";
+		abrirFicha.textContent = "Abrir ficha";
+		abrirFicha.addEventListener("click", () => {
+			seleccionarPestana("club");
+			abrirFichaClienta(clientaExistente);
+		});
+		accionCelda.append(abrirFicha);
+	}
+	const guardar = document.createElement("button");
+	guardar.type = "button";
+	guardar.className = "caja-exportar";
+	guardar.textContent = "Guardar";
+	guardar.disabled = estado.value === cita.estado;
+	estado.addEventListener("change", () => {
+		guardar.disabled = estado.value === cita.estado;
+	});
+	guardar.addEventListener("click", async () => {
+		guardar.disabled = true;
+		mensajeCitaPersistente = "";
+		try {
+			await cambiarEstadoCita(cita, estado.value);
+			citasAdminMensaje.textContent = "Estado actualizado.";
+			citasAdminMensaje.classList.remove("es-error");
+		} catch (error) {
+			console.error("No se pudo cambiar el estado de la cita.", error);
+			citasAdminMensaje.textContent = error.message || "No se pudo actualizar la cita.";
+			citasAdminMensaje.classList.add("es-error");
+			guardar.disabled = false;
+		}
+	});
+	const eliminar = document.createElement("button");
+	eliminar.type = "button";
+	eliminar.className = "caja-cita-eliminar";
+	eliminar.textContent = "Eliminar";
+	eliminar.setAttribute("aria-label", `Eliminar cita de ${titular.nombre || "clienta"} del ${fechaLegible(cita.fecha)} a las ${cita.hora}`);
+	eliminar.addEventListener("click", async () => {
+		eliminar.disabled = true;
+		try {
+			const eliminada = await eliminarCita(cita);
+			if (!eliminada) eliminar.disabled = false;
+		} catch (error) {
+			console.error("No se pudo eliminar la cita.", error);
+			mensajeCitaPersistente = "";
+			citasAdminMensaje.textContent = error.message || "No se pudo eliminar la cita.";
+			citasAdminMensaje.classList.add("es-error");
+			eliminar.disabled = false;
+		}
+	});
+	accionCelda.append(guardar, eliminar);
+	fila.append(estadoCelda, accionCelda);
+	return fila;
+}
+
 function renderizarCitas() {
 	const ordenadas = [...citasAgenda].sort((a, b) =>
 		a.fecha.localeCompare(b.fecha) || a.hora.localeCompare(b.hora)
 	);
+
+	// Separar citas activas (solicitada, confirmada) de anteriores o canceladas (atendida, cancelada)
+	const citasActivas = ordenadas.filter((cita) => cita.estado === "solicitada" || cita.estado === "confirmada");
+	const citasArchivadas = ordenadas.filter((cita) => cita.estado === "atendida" || cita.estado === "cancelada");
+
 	agendaCitasLista.replaceChildren();
-	agendaCitasVacio.hidden = ordenadas.length > 0;
-	for (const cita of ordenadas) {
-		const fila = document.createElement("tr");
-		const datos = cita.datos || {};
-		const titular = datos.titular || {};
-		fila.append(
-			celdaTabla(`${fechaLegible(cita.fecha)} · ${cita.hora}`),
-			celdaTabla(titular.nombre || "Clienta"),
-			celdaTabla(Array.isArray(cita.servicios) ? [...new Set(cita.servicios)].join(", ") : "—"),
-			celdaTabla(`${cita.duracionMin || 0} min${Number(cita.participantes) > 1 ? ` · ${cita.participantes} personas` : ""}`)
-		);
-		const estadoCelda = document.createElement("td");
-		const estado = document.createElement("select");
-		estado.setAttribute("aria-label", `Estado de la cita de ${titular.nombre || "clienta"} del ${fechaLegible(cita.fecha)}`);
-		for (const [valor, etiqueta] of [
-			["solicitada", "Solicitada"],
-			["confirmada", "Confirmada"],
-			["atendida", "Atendida"],
-			["cancelada", "Cancelada"]
-		]) estado.add(new Option(etiqueta, valor));
-		estado.value = cita.estado;
-		estadoCelda.append(estado);
-		const accionCelda = document.createElement("td");
-		const urlGoogleCalendar = googleCalendarUrlCita(cita, titular);
-		if (urlGoogleCalendar) {
-			const googleCalendar = document.createElement("a");
-			googleCalendar.className = "caja-exportar";
-			googleCalendar.href = urlGoogleCalendar;
-			googleCalendar.target = "_blank";
-			googleCalendar.rel = "noopener";
-			googleCalendar.textContent = "Google Calendar";
-			accionCelda.append(googleCalendar);
-		}
-		const telefonoClienta = normalizarTelefonoVE(titular.telefonoNormalizado || titular.telefono);
-		if (telefonoClienta) {
-			const resumenWhatsApp = `Hola ${titular.nombre || ""}, te escribimos de MayNails Studio por tu cita del ${fechaLegible(cita.fecha)} a las ${cita.hora}. Servicios: ${Array.isArray(cita.servicios) ? cita.servicios.join(", ") : "por confirmar"}. Duración: ${cita.duracionMin || 0} minutos.`;
-			const whatsapp = document.createElement("a");
-			whatsapp.className = "caja-exportar";
-			whatsapp.href = `https://wa.me/${telefonoClienta.replace(/\D/g, "")}?text=${encodeURIComponent(resumenWhatsApp)}`;
-			whatsapp.target = "_blank";
-			whatsapp.rel = "noopener";
-			whatsapp.textContent = "WhatsApp";
-			accionCelda.append(whatsapp);
-		}
-		const clientaExistente = clientas.find((clienta) =>
-			telefonoClienta &&
-			normalizarTelefonoVE(clienta.telefonoNormalizado || clienta.telefono) === telefonoClienta
-		);
-		if (clientaExistente) {
-			const abrirFicha = document.createElement("button");
-			abrirFicha.type = "button";
-			abrirFicha.className = "caja-exportar";
-			abrirFicha.textContent = "Abrir ficha";
-			abrirFicha.addEventListener("click", () => {
-				seleccionarPestana("club");
-				abrirFichaClienta(clientaExistente);
-			});
-			accionCelda.append(abrirFicha);
-		}
-		const guardar = document.createElement("button");
-		guardar.type = "button";
-		guardar.className = "caja-exportar";
-		guardar.textContent = "Guardar";
-		guardar.disabled = estado.value === cita.estado;
-		estado.addEventListener("change", () => {
-			guardar.disabled = estado.value === cita.estado;
-		});
-		guardar.addEventListener("click", async () => {
-			guardar.disabled = true;
-			mensajeCitaPersistente = "";
-			try {
-				await cambiarEstadoCita(cita, estado.value);
-				citasAdminMensaje.textContent = "Estado actualizado.";
-				citasAdminMensaje.classList.remove("es-error");
-			} catch (error) {
-				console.error("No se pudo cambiar el estado de la cita.", error);
-				citasAdminMensaje.textContent = error.message || "No se pudo actualizar la cita.";
-				citasAdminMensaje.classList.add("es-error");
-				guardar.disabled = false;
-			}
-		});
-		const eliminar = document.createElement("button");
-		eliminar.type = "button";
-		eliminar.className = "caja-cita-eliminar";
-		eliminar.textContent = "Eliminar";
-		eliminar.setAttribute("aria-label", `Eliminar cita de ${titular.nombre || "clienta"} del ${fechaLegible(cita.fecha)} a las ${cita.hora}`);
-		eliminar.addEventListener("click", async () => {
-			eliminar.disabled = true;
-			try {
-				const eliminada = await eliminarCita(cita);
-				if (!eliminada) eliminar.disabled = false;
-			} catch (error) {
-				console.error("No se pudo eliminar la cita.", error);
-				mensajeCitaPersistente = "";
-				citasAdminMensaje.textContent = error.message || "No se pudo eliminar la cita.";
-				citasAdminMensaje.classList.add("es-error");
-				eliminar.disabled = false;
-			}
-		});
-		accionCelda.append(guardar, eliminar);
-		fila.append(estadoCelda, accionCelda);
-		agendaCitasLista.append(fila);
+	agendaCitasVacio.hidden = citasActivas.length > 0;
+	for (const cita of citasActivas) {
+		agendaCitasLista.append(crearFilaCita(cita));
 	}
+	if (contCitasActivas) {
+		contCitasActivas.textContent = String(citasActivas.length);
+	}
+
+	if (agendaCitasArchivadasLista) {
+		agendaCitasArchivadasLista.replaceChildren();
+		if (agendaCitasArchivadasVacio) {
+			agendaCitasArchivadasVacio.hidden = citasArchivadas.length > 0;
+		}
+		for (const cita of citasArchivadas) {
+			agendaCitasArchivadasLista.append(crearFilaCita(cita));
+		}
+	}
+	if (toggleCitasArchivadas) {
+		toggleCitasArchivadas.textContent = citasArchivadasAbiertas
+			? "Ocultar citas anteriores o canceladas"
+			: `Ver citas anteriores o canceladas (${citasArchivadas.length})`;
+	}
+
+	actualizarContadoresRapidos();
 }
 
 async function eliminarCita(cita) {
@@ -2370,6 +2836,12 @@ async function cargarEstadisticasAgenda(citas = citasAgenda) {
 		}
 		agendaEstadisticasMensaje.textContent = `Actualizado desde ${perfiles.length} fichas de fidelidad y ${citas.length} citas.`;
 		agendaEstadisticasMensaje.classList.remove("es-error");
+		if (toggleEstadisticasAgenda) {
+			toggleEstadisticasAgenda.textContent = estadisticasAgendaAbiertas
+				? "Ocultar estadísticas"
+				: "Mostrar estadísticas detalladas (4 métricas)";
+		}
+		actualizarContadoresRapidos();
 	} catch (error) {
 		console.error("No se pudieron calcular las estadísticas de agenda.", error);
 		agendaEstadisticasMensaje.textContent = "No se pudieron cargar las estadísticas desde Firestore.";
@@ -2399,6 +2871,7 @@ function actualizarSugerenciasClientas(campo) {
 		clubSugerencias.hidden = true;
 		return;
 	}
+	establecerClientasListadoAbierto(true);
 	const coincidencias = clientas.filter((clienta) => {
 		const telefono = normalizarTelefonoVE(clienta.telefonoNormalizado || clienta.telefono);
 		const digitosTelefono = telefono.replace(/\D/g, "");

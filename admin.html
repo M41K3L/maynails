@@ -16,7 +16,8 @@
 	<script src="tema.js" defer></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 	<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-	<script type="module" src="admin.js?v=maynails-admin-v7"></script>
+	<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+	<script type="module" src="admin.js?v=maynails-admin-v8"></script>
 </head>
 <body>
 	<header>
@@ -34,8 +35,40 @@
 			<div class="pagina-titulo caja-titulo">
 				<span class="tag">Administración interna</span>
 				<h1>Centro de administración</h1>
-				<p>Gestiona la caja y el Club MayNails en un solo lugar.</p>
+				<p>Gestiona la caja, estadísticas y el Club MayNails en un solo lugar.</p>
 			</div>
+
+			<!-- Contadores rápidos ejecutivos visibles de entrada -->
+			<aside class="admin-contadores-rapidos" aria-label="Contadores rápidos de gestión">
+				<article class="admin-contador-card">
+					<span class="admin-contador-icono" aria-hidden="true">📅</span>
+					<div>
+						<span>Citas pendientes</span>
+						<strong id="rapido-citas-pendientes">0</strong>
+					</div>
+				</article>
+				<article class="admin-contador-card">
+					<span class="admin-contador-icono" aria-hidden="true">💳</span>
+					<div>
+						<span>Por cobrar (Fiado)</span>
+						<strong id="rapido-cuentas-cobrar">$0.00</strong>
+					</div>
+				</article>
+				<article class="admin-contador-card">
+					<span class="admin-contador-icono" aria-hidden="true">✨</span>
+					<div>
+						<span>Clientas registradas</span>
+						<strong id="rapido-total-clientas">0</strong>
+					</div>
+				</article>
+				<article class="admin-contador-card">
+					<span class="admin-contador-icono" aria-hidden="true">📊</span>
+					<div>
+						<span>Movimientos del día</span>
+						<strong id="rapido-movimientos-hoy">0</strong>
+					</div>
+				</article>
+			</aside>
 
 			<nav class="admin-pestanas" aria-label="Secciones de administración" role="tablist">
 				<button id="tab-caja" class="admin-pestana" type="button" role="tab" aria-selected="true" aria-controls="panel-caja">Caja y Contabilidad</button>
@@ -104,6 +137,58 @@
 						<div><span>Materiales e insumos</span><strong id="gasto-materiales">$0.00</strong></div>
 						<div><span>Herramientas y equipos</span><strong id="gasto-herramientas">$0.00</strong></div>
 						<div><span>Otros gastos</span><strong id="gasto-otros">$0.00</strong></div>
+					</div>
+				</div>
+			</section>
+
+			<!-- Gráficas Visuales con Datos Reales (Chart.js) -->
+			<section class="caja-panel caja-graficas-seccion" aria-labelledby="graficas-titulo">
+				<div class="caja-panel-cabecera caja-graficas-cabecera">
+					<div>
+						<span class="tag">Métricas visuales</span>
+						<h2 id="graficas-titulo">Gráficas y Rendimiento</h2>
+					</div>
+					<div class="caja-graficas-controles">
+						<label class="caja-graficas-label" for="graficas-periodo">Período:
+							<select id="graficas-periodo" class="caja-graficas-select">
+								<option value="mes" selected>Este mes</option>
+								<option value="historico">Histórico completo</option>
+							</select>
+						</label>
+						<button id="toggle-graficas" class="caja-historial-toggle" type="button" aria-expanded="true" aria-controls="graficas-contenido">Ocultar gráficas</button>
+					</div>
+				</div>
+				<div id="graficas-contenido" class="caja-graficas-contenido is-open">
+					<div class="caja-graficas-interior">
+						<div class="caja-graficas-grid">
+							<article class="caja-grafica-card">
+								<div class="caja-grafica-header">
+									<h3>Ingresos vs. Gastos (USD)</h3>
+									<span class="caja-grafica-sub" id="grafica-sub-balance">$0.00 neto</span>
+								</div>
+								<div class="caja-grafica-canvas-wrap">
+									<canvas id="chart-ingresos-gastos"></canvas>
+								</div>
+							</article>
+							<article class="caja-grafica-card">
+								<div class="caja-grafica-header">
+									<h3>Servicios más solicitados</h3>
+									<span class="caja-grafica-sub" id="grafica-sub-servicios">Top categorías</span>
+								</div>
+								<div class="caja-grafica-canvas-wrap">
+									<canvas id="chart-servicios"></canvas>
+								</div>
+							</article>
+							<article class="caja-grafica-card">
+								<div class="caja-grafica-header">
+									<h3>Métodos de pago</h3>
+									<span class="caja-grafica-sub" id="grafica-sub-metodos">Distribución</span>
+								</div>
+								<div class="caja-grafica-canvas-wrap">
+									<canvas id="chart-metodos-pago"></canvas>
+								</div>
+							</article>
+						</div>
 					</div>
 				</div>
 			</section>
@@ -409,18 +494,25 @@
 					</div>
 				</article>
 				<section class="admin-clientas-listado" aria-labelledby="clientas-listado-titulo">
-					<div class="caja-panel-cabecera">
-						<div><span class="tag">Seguimiento de cuentas</span><h3 id="clientas-listado-titulo">Clientas y saldos pendientes</h3></div>
-						<label>Mostrar
-							<select id="filtro-deuda-clientas">
-								<option value="todas">Todas</option>
-								<option value="aldia">Al día</option>
-								<option value="deuda">⚠️ Con deuda pendiente (Morosas)</option>
-							</select>
-						</label>
+					<div class="caja-panel-cabecera admin-clientas-cabecera">
+						<div><span class="tag">Seguimiento de cuentas</span><h3 id="clientas-listado-titulo">Directorio de clientas y saldos</h3></div>
+						<div class="admin-clientas-controles">
+							<label>Mostrar
+								<select id="filtro-deuda-clientas">
+									<option value="todas">Todas</option>
+									<option value="aldia">Al día</option>
+									<option value="deuda">⚠️ Con deuda pendiente (Morosas)</option>
+								</select>
+							</label>
+							<button id="toggle-clientas-listado" class="caja-historial-toggle" type="button" aria-expanded="false" aria-controls="clientas-listado-contenido">Mostrar listado (0)</button>
+						</div>
 					</div>
-					<div id="clientas-deuda-lista" class="admin-clientas-grid"></div>
-					<p id="clientas-deuda-vacio" class="caja-vacio" hidden>No hay clientas que coincidan con este filtro.</p>
+					<div id="clientas-listado-contenido" class="admin-collapsible-contenido">
+						<div class="admin-collapsible-interior">
+							<div id="clientas-deuda-lista" class="admin-clientas-grid"></div>
+							<p id="clientas-deuda-vacio" class="caja-vacio" hidden>No hay clientas que coincidan con este filtro.</p>
+						</div>
+					</div>
 				</section>
 			</section>
 			<section id="panel-agenda" class="admin-tab-panel admin-agenda-panel" role="tabpanel" aria-labelledby="tab-agenda" hidden>
@@ -477,36 +569,60 @@
 						<div><span class="tag">Reservas</span><h2 id="citas-titulo">Citas</h2></div>
 						<p id="citas-admin-mensaje" class="agenda-mensaje" role="status" aria-live="polite"></p>
 					</div>
-					<div class="caja-tabla-contenedor">
-						<table class="caja-tabla agenda-citas-tabla">
-							<thead><tr><th>Fecha y hora</th><th>Clienta</th><th>Servicios</th><th>Duración</th><th>Estado</th><th>Acción</th></tr></thead>
-							<tbody id="agenda-citas-lista"></tbody>
-						</table>
-						<p id="agenda-citas-vacio" class="caja-vacio">No hay citas registradas.</p>
+					<div class="agenda-bloque-citas-activas">
+						<h3 class="agenda-subtitulo-citas">Citas activas y próximas (<span id="cont-citas-activas">0</span>)</h3>
+						<div class="caja-tabla-contenedor">
+							<table class="caja-tabla agenda-citas-tabla">
+								<thead><tr><th>Fecha y hora</th><th>Clienta</th><th>Servicios</th><th>Duración</th><th>Estado</th><th>Acción</th></tr></thead>
+								<tbody id="agenda-citas-lista"></tbody>
+							</table>
+							<p id="agenda-citas-vacio" class="caja-vacio">No hay citas activas o próximas registradas.</p>
+						</div>
+					</div>
+					<div class="agenda-bloque-citas-archivadas">
+						<div class="agenda-citas-archivadas-cabecera">
+							<button id="toggle-citas-archivadas" class="caja-historial-toggle" type="button" aria-expanded="false" aria-controls="agenda-citas-archivadas-contenido">Ver citas anteriores o canceladas (0)</button>
+						</div>
+						<div id="agenda-citas-archivadas-contenido" class="admin-collapsible-contenido">
+							<div class="admin-collapsible-interior">
+								<div class="caja-tabla-contenedor" style="margin-top: 14px;">
+									<table class="caja-tabla agenda-citas-tabla">
+										<thead><tr><th>Fecha y hora</th><th>Clienta</th><th>Servicios</th><th>Duración</th><th>Estado</th><th>Acción</th></tr></thead>
+										<tbody id="agenda-citas-archivadas-lista"></tbody>
+									</table>
+									<p id="agenda-citas-archivadas-vacio" class="caja-vacio">No hay citas anteriores ni canceladas.</p>
+								</div>
+							</div>
+						</div>
 					</div>
 				</section>
 
 				<section class="caja-panel" aria-labelledby="estadisticas-agenda-titulo">
 					<div class="caja-panel-cabecera">
-						<div><span class="tag">Datos reales</span><h2 id="estadisticas-agenda-titulo">Estadísticas</h2></div>
+						<div><span class="tag">Datos reales</span><h2 id="estadisticas-agenda-titulo">Estadísticas detalladas</h2></div>
+						<button id="toggle-estadisticas-agenda" class="caja-historial-toggle" type="button" aria-expanded="false" aria-controls="estadisticas-agenda-contenido">Mostrar estadísticas</button>
 					</div>
-					<div class="agenda-metricas">
-						<article class="caja-card"><span>Clientas únicas totales</span><strong id="metric-clientas-unicas">—</strong></article>
-						<article class="caja-card"><span>Citas atendidas este mes</span><strong id="metric-citas-mes">—</strong></article>
-						<article class="caja-card"><span>Clientas nuevas por referencia</span><strong id="metric-clientas-referidas">—</strong></article>
-						<article class="caja-card caja-card-deuda"><span>Total Cuentas por Cobrar (Fiado)</span><strong id="metric-cuentas-por-cobrar">$0.00</strong></article>
-					</div>
-					<div class="agenda-estadisticas-grid">
-						<div class="caja-metodos">
-							<h3>Top 5 clientas más frecuentes</h3>
-							<ol id="agenda-top-clientas" class="agenda-lista-metricas"></ol>
+					<div id="estadisticas-agenda-contenido" class="admin-collapsible-contenido">
+						<div class="admin-collapsible-interior">
+							<div class="agenda-metricas">
+								<article class="caja-card"><span>Clientas únicas totales</span><strong id="metric-clientas-unicas">—</strong></article>
+								<article class="caja-card"><span>Citas atendidas este mes</span><strong id="metric-citas-mes">—</strong></article>
+								<article class="caja-card"><span>Clientas nuevas por referencia</span><strong id="metric-clientas-referidas">—</strong></article>
+								<article class="caja-card caja-card-deuda"><span>Total Cuentas por Cobrar (Fiado)</span><strong id="metric-cuentas-por-cobrar">$0.00</strong></article>
+							</div>
+							<div class="agenda-estadisticas-grid">
+								<div class="caja-metodos">
+									<h3>Top 5 clientas más frecuentes</h3>
+									<ol id="agenda-top-clientas" class="agenda-lista-metricas"></ol>
+								</div>
+								<div class="caja-metodos">
+									<h3>Distribución de servicios</h3>
+									<ul id="agenda-distribucion-servicios" class="agenda-lista-metricas"></ul>
+								</div>
+							</div>
+							<p id="agenda-estadisticas-mensaje" class="agenda-mensaje" role="status" aria-live="polite"></p>
 						</div>
-						<div class="caja-metodos">
-							<h3>Distribución de servicios</h3>
-							<ul id="agenda-distribucion-servicios" class="agenda-lista-metricas"></ul>
-						</div>
 					</div>
-					<p id="agenda-estadisticas-mensaje" class="agenda-mensaje" role="status" aria-live="polite"></p>
 				</section>
 			</section>
 		</section>
